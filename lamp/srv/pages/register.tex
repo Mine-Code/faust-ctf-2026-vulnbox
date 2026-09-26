@@ -2,29 +2,6 @@
 
 \newwrite{\shipfile}
 
-% string codes for \ { and }
-\StrChar{\string\f}{1}[\stringbackslash]
-\StrChar{\string\{}{2}[\stringcurlyopen]
-\StrChar{\string\}}{2}[\stringcurlyclose]
-\StrChar{\string\_}{2}[\stringsub]
-\StrChar{\string\^}{2}[\stringsup]
-
-% Stores macro #1, e.g. \store{\foo} generates
-% \def\foo{...}
-% with \ escaped as \textbackslash{}
-%      { escaped as \{
-%      } escaped as \}
-\newcommand{\store}[2]{
-  \begingroup
-  \StrSubstitute{#2}{\stringbackslash}{\string\Uchar92}[\escaped]
-  \StrSubstitute{\escaped}{\stringcurlyopen}{\string\Uchar123}[\escaped]
-  \StrSubstitute{\escaped}{\stringcurlyclose}{\string\Uchar125}[\escaped]
-  \StrSubstitute{\escaped}{\stringsub}{\string\Uchar95}[\escaped]
-  \StrSubstitute{\escaped}{\stringsup}{\string\Uchar94}[\escaped]
-  \immediate\write\shipfile{\noexpand\def\noexpand#1{\escaped}}
-  \endgroup
-}
-
 \ExplSyntaxOn
 
 \prg_new_conditional:Npnn \str_if_alnum:n #1 { T, F, TF }
@@ -77,6 +54,15 @@
     \fi
 
     \ifdefined\postshipname
+      \expandafter\ifAlnum\expandafter{\postshipname{}}{}{\gdef\registerFail{Ship name must be alphanumeric}}
+      \StrLen{\postshipname{}}[\shipnameLength]
+      \ifnum\shipnameLength<1
+        \gdef\registerFail{No ship name given}
+      \else
+        \ifnum\shipnameLength>64
+          \gdef\registerFail{Ship name must not exceed 64 characters}
+        \fi
+      \fi
     \else
       \def\registerFail{No ship name given}
     \fi
@@ -104,7 +90,7 @@
     }
     \endgroup
     \immediate\openout\shipfile=/storage/\postusername{}
-    \store{\shipname}{\postshipname{}}
+    \immediate\write\shipfile{\postshipname{}}
     \immediate\closeout\shipfile{}
     \redirect{/}{2}
   \else

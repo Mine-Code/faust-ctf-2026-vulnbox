@@ -5,7 +5,20 @@
   \gdef\htmlucode!1{&#!1;}
 \endgroup
 \IfLoggedIn{
-  \input{/storage/\username{}.tex}
+  % Storage files are user data, not TeX source. Read every metacharacter as text.
+  \CatchFileEdef{\shipname}{/storage/\username{}.tex}{
+    \endlinechar=-1
+    \catcode92=12
+    \catcode123=12
+    \catcode125=12
+    \catcode37=12
+    \catcode35=12
+    \catcode36=12
+    \catcode38=12
+    \catcode94=12
+    \catcode95=12
+    \catcode126=12
+  }
   \newcommand{\pageTitle}{Ship "\shipname" <form method="POST" style="display: contents"><input type="hidden" name="action" value="tick" /><input type="submit" value="\htmlucode{8635} Refresh" style="width: max-content; padding: 0 0.5rem; margin: 0"/></form>}
   \newcommand{\pageHeaderTitle}{Ship "\shipname"}
 }{
