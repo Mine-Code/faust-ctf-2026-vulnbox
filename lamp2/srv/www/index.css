@@ -1,0 +1,118 @@
+#ship-wrapper {
+    display: flex;
+    width: 100%;
+    flex: 1;
+    gap: 1rem;
+}
+
+#components {
+    align-self: center;
+}
+
+#components > input[type="radio"] {
+    margin-left: calc(50% - 10px);
+}
+
+#components > label {
+    padding: 0;
+    margin: 0;
+    text-align: center;
+}
+
+#canvas {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    padding: 2rem;
+    box-sizing: border-box;
+    border: 1px solid #1a1a1a;
+    box-shadow: 0 0 0 3px #6a6a6a34;
+    border-radius: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.line {
+  --raw-x1: attr(data-x1 type(<number>));
+  --raw-x2: attr(data-x2 type(<number>));
+  --x1: calc(var(--raw-x1) - 20.8 * sign(var(--raw-x1) - var(--raw-x2)));
+  --y1: attr(data-y1 type(<number>));
+  --x2: calc(var(--raw-x2) + 20.8 * sign(var(--raw-x1) - var(--raw-x2)));
+  --y2: attr(data-y2 type(<number>));
+
+  --dx: calc(var(--x2) - var(--x1));
+  --dy: calc(var(--y2) - var(--y1));
+
+  position: absolute;
+  left: calc(var(--x1) * 1px);
+  top: calc(var(--y1) * 1px);
+  width: hypot(calc(var(--dx) * 1px), calc(var(--dy) * 1px));
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 2.5px;
+  background-color: black;
+  background-repeat: repeat-x;
+  background-position: center;
+  background-size: 14px 100%;
+  transform-origin: 0 50%;
+  transform: rotate(atan2(var(--dy), var(--dx)));
+}
+
+.line.off {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='6' viewBox='0 0 14 6'%3E%3Cpath d='M2 0.8 L11 3 L2 5.2 Z' fill='%23ff3b3b'/%3E%3C/svg%3E");
+}
+
+.line.on {
+    background-color: #0b5d0b;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='6' viewBox='0 0 14 6'%3E%3Cpath d='M2 0.8 L11 3 L2 5.2 Z' fill='%234ce64c'/%3E%3C/svg%3E");
+    animation: line-flow 0.7s linear infinite;
+}
+
+@keyframes line-flow {
+    from { background-position-x: 0; }
+    to   { background-position-x: 14px; }
+}
+
+#canvas .component-wrap {
+    width: 2.6rem;
+    height: 2.6rem;
+    cursor: pointer;
+    transform: translate(-50%, -50%);
+}
+
+.component {
+    border: none;
+    width: 100%;
+    height: 100%;
+    background-image: var(--img);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.button[data-properties="on "] {
+    background-image: url("/components/button_on.svg") !important;
+}
+
+.light {
+    background-blend-mode: multiply;
+    -webkit-mask: var(--img) center / contain no-repeat;
+    mask: var(--img) center / contain no-repeat;
+}
+
+.light.off {
+    background-color: #444441;
+}
+
+.light.on {
+    background-color: #EF9F27;
+}
+
+.component-wrap.selected {
+    outline: 3px solid #4aa3ff;
+    outline-offset: 3px;
+    border-radius: 50%;
+}

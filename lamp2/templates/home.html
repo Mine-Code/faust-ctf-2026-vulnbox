@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% if username %}
+  {% set heading = 'Ship "' ~ (ship_name or '') ~ '"' %}
+  {% set document_title = heading %}
+{% else %}
+  {% set heading = 'LAMP' %}
+  {% set document_title = heading %}
+{% endif %}
+{% set active_page = '/' %}
+{% block extra_head %}
+  <link rel="stylesheet" href="/index.css">
+  <script src="/index.js"></script>
+{% endblock %}
+{% block heading %}
+  {% if username %}
+    {{ heading }} <form method="POST" style="display: contents"><input type="hidden" name="action" value="tick"><input type="submit" value="&#8635; Refresh" style="width: max-content; padding: 0 0.5rem; margin: 0"></form>
+  {% else %}
+    {{ heading }}
+  {% endif %}
+{% endblock %}
+{% block body %}
+  {% if username %}
+    <div id="ship-wrapper">
+      <div id="components">
+        <input id="component-light" type="radio" name="component" value="light" checked><label for="component-light">Light</label>
+        <input id="component-button" type="radio" name="component" value="button"><label for="component-button">Button</label>
+        <input id="component-source" type="radio" name="component" value="source"><label for="component-source">Source</label>
+        <br>
+        <label><input type="checkbox" id="connect-mode"> Connect mode</label>
+      </div>
+      <div id="canvas" data-tooltip="Click to add">
+        {% for connection in connections %}
+          <div class="line {% if connection.state == 1 %}on{% else %}off{% endif %}" data-x1="{{ connection.x1 }}" data-y1="{{ connection.y1 }}" data-x2="{{ connection.x2 }}" data-y2="{{ connection.y2 }}"></div>
+        {% endfor %}
+        {% for component in components %}
+          {% set state = 'on' if component.state == 1 else 'off' %}
+          {% if component.type == 'button' %}
+            <form class="plain" method="POST">
+              <span class="component-wrap" data-id="{{ component.id }}" style="position: absolute; left: {{ component.x }}px; top: {{ component.y }}px"><input class="component {{ component.type }} {{ state }}" data-properties="{{ component.properties }}" type="submit" style="--img: url('/components/{{ component.type }}_{{ state }}.svg'); margin: 0; padding: 0" value=""></span>
+              <input type="hidden" name="action" value="toggle">
+              <input type="hidden" name="id" value="{{ component.id }}">
+            </form>
+          {% else %}
+            <span class="component-wrap" data-id="{{ component.id }}" style="position: absolute; left: {{ component.x }}px; top: {{ component.y }}px"><input class="component {{ component.type }} {{ state }}" data-properties="{{ component.properties }}" type="submit" style="--img: url('/components/{{ component.type }}_{{ state }}.svg'); cursor: default; margin: 0; padding: 0" value=""></span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <p><a href="/login">Log in</a> or <a href="/register">register</a> to manage your ship</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <title>{{ document_title }}</title>
+  <link rel="stylesheet" href="/global.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <img src="/logo.svg" width="100%" style="aspect-ratio: 2000 / 100; background: var(--background-header-image); border-bottom: 1px solid var(--background-header-border)">
+  <div id="menu">
+    <a class="menu-item{% if active_page == '/' %} highlight{% endif %}" href="/">Overview</a>
+    <div class="spacer"></div>
+    {% if username %}
+      <a class="menu-item" href="/logout">Logout</a>
+    {% else %}
+      <a class="menu-item{% if active_page == '/login' %} highlight{% endif %}" href="/login">Login</a>
+      <a class="menu-item{% if active_page == '/register' %} highlight{% endif %}" href="/register">Register</a>
+    {% endif %}
+  </div>
+  <div id="content">
+    <h1>{% block heading %}{{ heading }}{% endblock %}</h1>
+    {% block body %}{% endblock %}
+  </div>
+</body>
+</html>

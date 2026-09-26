@@ -1,0 +1,38 @@
+services:
+  web:
+    build: .
+    image: lamp
+    ports:
+      - 1337:1337
+    volumes:
+      - ./srv/www:/app/srv/www:ro
+      - storage:/storage
+  cleanup:
+    build: .
+    image: lamp
+    entrypoint: /usr/local/bin/cleanup.sh
+    volumes:
+      - ./srv/www:/app/srv/www:ro
+      - storage:/storage
+  redis:
+    image: redis
+  mariadb:
+    image: mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: lamp
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db:/var/lib/mysql
+
+volumes:
+    storage:
+    db:
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+        driver: default
+        config:
+            - subnet: "fd42:d0ce:7777::/64"

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set document_title = 'Login' %}
+{% set heading = 'Login' %}
+{% set active_page = '/login' %}
+{% block body %}
+  {% if success %}
+    <meta http-equiv="Refresh" content="2;url=/">
+    <p>Successfully logged in</p>
+  {% else %}
+    {% for error in errors %}<p>{{ error }}</p>{% endfor %}
+    <form method="POST">
+      <label>Username:</label><input type="text" name="username">
+      <label>Password:</label><input type="text" name="password">
+      <input type="submit" value="Log In">
+    </form>
+  {% endif %}
+{% endblock %}

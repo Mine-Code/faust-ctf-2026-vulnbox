@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% set document_title = 'Register' %}
+{% set heading = 'Register' %}
+{% set active_page = '/register' %}
+{% block body %}
+  {% if success %}
+    <meta http-equiv="Refresh" content="2;url=/">
+    <p>Successfully registered account</p>
+  {% else %}
+    {% for error in errors %}<p>{{ error }}</p>{% endfor %}
+    <form method="POST">
+      <label>Username:</label><input type="text" name="username">
+      <label>Password:</label><input type="text" name="password">
+      <label>Name of ship:</label><input type="text" name="shipname">
+      <input type="submit" value="Register">
+    </form>
+  {% endif %}
+{% endblock %}
