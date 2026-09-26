@@ -4,9 +4,9 @@ from flask_login import login_user, login_required, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
 from .models import User
-from pathlib import Path
 import uuid
 import os
+from .user_storage import ensure_user_directory
 
 auth = Blueprint('auth', __name__)
 DATA_PATH = os.getenv("DATA_PATH")
@@ -52,7 +52,7 @@ def register_post():
 
     uid = str(uuid.uuid4())
     new_user = User(id=uid, username=username, password=generate_password_hash(password, method='pbkdf2:sha256:1'))
-    Path(DATA_PATH).joinpath(uid).mkdir()
+    ensure_user_directory(DATA_PATH, uid)
 
     db.session.add(new_user)
     db.session.commit()

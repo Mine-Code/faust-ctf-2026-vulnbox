@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Blueprint, render_template, request, redirect, flash, send_file, url_for, current_app
+from flask import Blueprint, render_template, request, redirect, flash, send_file, url_for, current_app, abort
 from flask_login import current_user, login_required
 import logging
 from .typst_util import get_translation
@@ -16,6 +16,7 @@ import shutil
 from werkzeug.utils import secure_filename
 from .safe_archive import UnsafeArchiveError, extract_archive
 from .typst_runner import TypstSandboxError, compile_typst
+from .user_storage import ensure_user_directory
 
 main = Blueprint('main', __name__)
 
@@ -97,18 +98,30 @@ def index():
 @main.route('/download_file/<project>')
 @login_required
 def download_file(project):
-    projects = os.listdir(f"{DATA_PATH}/{current_user.id}")
+    try:
+        user_path = ensure_user_directory(DATA_PATH, current_user.id)
+    except (OSError, ValueError):
+        abort(404)
+    projects = os.listdir(user_path)
     if project not in projects:
         flash("Project does not exist")
         return redirect(url_for("main.index"))
-    project_path = f"{DATA_PATH}/{current_user.id}/{project}/{project}.pdf"
-    
-    return send_file(project_path)
+    project_path = user_path / project
+    if project_path.is_symlink() or not project_path.resolve().is_relative_to(user_path):
+        abort(404)
+    pdf_path = project_path / f"{project}.pdf"
+    if pdf_path.is_symlink() or not pdf_path.is_file():
+        abort(404)
+    return send_file(pdf_path)
 
 @main.route('/list_files')
 @login_required
 def list_files():
-    projects = os.listdir(f"{DATA_PATH}/{current_user.id}")
+    try:
+        user_path = ensure_user_directory(DATA_PATH, current_user.id)
+    except (OSError, ValueError):
+        abort(404)
+    projects = os.listdir(user_path)
     return render_template("list_files.html", projects=projects)
 
 @main.route('/convert_file')
@@ -184,7 +197,12 @@ def convert_file():
     if not project_name:
         flash("Invalid filename")
         return redirect(request.url)
-    user_path = Path(DATA_PATH) / current_user.id
+    try:
+        user_path = ensure_user_directory(DATA_PATH, current_user.id)
+    except (OSError, ValueError) as error:
+        current_app.logger.warning("cannot access user project directory: %s", error)
+        flash("Document translation failed. Try again.")
+        return redirect(request.url)
     project_path = user_path / project_name
     if project_path.exists():
         flash("Project with this name already exists")
