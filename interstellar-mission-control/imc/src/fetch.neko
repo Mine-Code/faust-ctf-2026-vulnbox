@@ -17,7 +17,7 @@ var FETCH_SPECS = {
                 filter => function(being, row) {return being.id==row.overseer || being.id==row.sponsor}},
 	SPACESHIP => { table => "SPACESHIPS", tag => "U0RS",
 		cols => $array("id","name","location","fuel","max_speed","tuv","manufacturer","crew","resources","capacity", "janitor"),
-                filter => function(being, row) {return (being.crew != null && being.crew==row.crew) || being.id==row.janitor}}
+		filter => function(being, row) {return (being.crew != null && row.crew != null && being.crew==row.crew) || being.id==row.janitor}}
 };
 
 var authenticate = function(identity){

@@ -22,7 +22,7 @@ var UPDATE_SPEC = {
 	SPACESHIP => { table => "SPACESHIPS", tag => "U0RS",
 		cols => $array("id","name","location","fuel","max_speed","tuv","manufacturer","crew","resources","capacity","janitor"),
 		updateable => $array("location","fuel","max_speed","tuv","manufacturer","crew","resources","capacity"),
-                auth => function(being, row) {return (being.crew!=null && being.crew==row.crew) || being.id == row.janitor}}
+		auth => function(being, row) {return (being.crew!=null && row.crew!=null && being.crew==row.crew) || being.id == row.janitor}}
 };
 
 var authenticate = function(identity){
@@ -118,6 +118,7 @@ var handleUpdate = function(ctx){
                                         }
                                     } catch e {
                                         resp.sendMessage(resp.addErrorMessage(null, 1, "Unable to join crew!"));
+                                        return -1;
                                     }
                                 }
                                 if((db.updateById(spec.table, id, cols[i], v)) < 0) {

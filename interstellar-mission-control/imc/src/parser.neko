@@ -9,6 +9,7 @@ var file_stdin = $loader.loadprim("file@file_stdin", 0);
 var file_eof = $loader.loadprim("file@file_eof", 1);
 var stdin = file_stdin();
 var MAXLINE = 4067;
+var MAX_REQUEST_LINES = 64;
 
 var handleRequest = function(){
 	// parse header
@@ -24,9 +25,15 @@ var handleRequest = function(){
 		resp.sendMessage(res);
 		return -1;
 	}
+	var num_lines = $int(items[1]);
+	if(num_lines < 0 || num_lines > MAX_REQUEST_LINES){
+		var res = resp.addErrorMessage(null, 1, "Invalid message size");
+		resp.sendMessage(res);
+		return -1;
+	}
 
 	var header = {
-		num_lines => $int(items[1]),
+		num_lines => num_lines,
 		request_type => items[2],
 		time => items[3],
 		request_subject => items[4],
