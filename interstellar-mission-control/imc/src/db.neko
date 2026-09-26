@@ -1,0 +1,260 @@
+var sqlite_connect = $loader.loadprim("sqlite@connect", 1);
+var sqlite_request = $loader.loadprim("sqlite@request", 2);
+var sqlite_execute = $loader.loadprim("sqlite@execute", 2);
+var sqlite_result_get_length = $loader.loadprim("sqlite@result_get_length", 1);
+var sqlite_result_next = $loader.loadprim("sqlite@result_next", 1);
+var sqlite_result_get_nfields = $loader.loadprim("sqlite@result_get_nfields", 1);
+var log_err = $loader.loadprim("file@log_err", 1);
+
+var getCurTime = $loader.loadprim("date@date_now", 0)
+
+var checkInput = function(s){
+	var slen = $ssize(s);
+	var i = 0;
+	var valid = true;
+	while(i < slen){
+		var char = $sget(s,i);
+			
+		if($not((char >= 97 && char <= 122) || (char >= 65 && char <= 90) || (char >= 48 && char <= 57) || (char ==47) || (char == 95) || (char == 43) || (char == 32) || (char == 94))){
+			valid = false;
+		}
+		i = i+1;
+	}
+	return valid;
+}
+
+var isColumnOf = function(tablename, s){
+	var sql = "SELECT name FROM pragma_table_info('"+ tablename +"');";
+	var res = sqlite_request(db, sql);
+	var names = sqlite_result_next(res);
+        var found = false;
+	
+	while(names != null){
+		if (names.name == s) found = true;
+		names = sqlite_result_next(res);
+	}
+
+	return found;
+
+}
+
+var initDB = function(){
+	db = sqlite_connect("data/db.db");
+	sqlite_execute(db, "PRAGMA busy_timeout=5000;");
+	var sql = "CREATE TABLE IF NOT EXISTS BEINGS (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, authenticator TEXT NOT NULL, age INTEGER NOT NULL, remaining_lives INTEGER NOT NULL, affiliation TEXT, crew INTEGER, diseases TEXT, skills TEXT, timestamp INTEGER) STRICT;";
+	sqlite_execute(db, sql);
+
+	sql = "CREATE TABLE IF NOT EXISTS CREWS (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, captain INTEGER NOT NULL, allowance INTEGER NOT NULL, equipment TEXT, invited TEXT, timestamp INTEGER) STRICT;";
+	sqlite_execute(db, sql);
+
+	sql = "CREATE TABLE IF NOT EXISTS MILESTONES (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, reward TEXT, description TEXT, requirements TEXT, timestamp INTEGER) STRICT;"
+	sqlite_execute(db, sql);
+
+	sql = "CREATE TABLE IF NOT EXISTS MISSIONS (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, milestones TEXT, spaceships TEXT, planets TEXT, deadline INTEGER NOT NULL, sponsor INTEGER NOT NULL, reward TEXT, overseer INTEGER, timestamp INTEGER) STRICT;";
+	sqlite_execute(db, sql);
+
+	sql = "CREATE TABLE IF NOT EXISTS SPACESHIPS (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, location TEXT, fuel INTEGER NOT NULL, max_speed INTEGER, tuv TEXT NOT NULL, manufacturer TEXT NOT NULL, crew INTEGER, resources TEXT, capacity INTEGER NOT NULL, janitor INTEGER, timestamp INTEGER) STRICT;";
+	sqlite_execute(db, sql);
+	
+	sql = "DELETE FROM BEINGS where timestamp < unixepoch()-1200;"
+	sqlite_execute(db, sql);
+
+	sql = "DELETE FROM CREWS where timestamp < unixepoch()-1200;"
+	sqlite_execute(db, sql);
+	
+	sql = "DELETE FROM MILESTONES where timestamp < unixepoch()-1200;"
+	sqlite_execute(db, sql);
+	
+	sql = "DELETE FROM MISSIONS where timestamp < unixepoch()-1200;"
+	sqlite_execute(db, sql);
+	
+	sql = "DELETE FROM SPACESHIPS where timestamp < unixepoch()-1200;"
+	sqlite_execute(db, sql);
+
+}
+$exports.initDB = initDB;
+
+var addBeing = function(name, auth, age, remaining_lives, affiliation, diseases, skills){
+	if(name == "" || auth == "" || age == "" || remaining_lives == "") return -1;
+	var amalg = name+auth+age+remaining_lives+affiliation+diseases+skills;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "INSERT INTO BEINGS (name, authenticator, age, remaining_lives, affiliation, diseases, skills, timestamp) VALUES ( \""+ name + "\",\"" + auth + "\"," + age + "," + remaining_lives + ",\"" + affiliation + "\",\"" + diseases + "\",\"" + skills + "\"," + getCurTime() + ");";
+	try{
+		var res = sqlite_request(db, sql);
+		sqlite_result_next(res);
+		return sqlite_result_get_length(res);
+	} catch e {
+		return -3;
+	}
+}
+$exports.addBeing = addBeing;
+
+var createMilestone = function(name, reward, description, requirements){
+	if(name == "" || name == null) return -1;
+	var amalg = name+reward+description+requirements;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "INSERT INTO MILESTONES (name, reward, description, requirements, timestamp) VALUES ( \""+ name + "\",\"" + reward + "\",\"" + description + "\",\"" + requirements + "\");";
+	try{
+		var res = sqlite_request(db, sql);
+		sqlite_result_next(res);
+		return sqlite_result_get_length(res);
+	} catch e {
+		return -3;
+	}
+}
+$exports.createMilestone = createMilestone;
+
+var createCrew = function(name, captain, allowance, equipment){
+	if(name == "" || captain == "" || allowance == "") return -1;
+	var amalg = name+captain+allowance+equipment;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "INSERT INTO CREWS (name, captain, allowance, equipment, timestamp) VALUES ( \""+ name + "\"," + captain + "," + allowance + ",\"" + equipment + "\"," + getCurTime() + ");";
+	try{
+		var res = sqlite_request(db, sql);
+		sqlite_result_next(res);
+		return sqlite_result_get_length(res);
+	} catch e {
+		return -3;
+	}
+}
+$exports.createCrew = createCrew;
+
+var createSpaceship = function(name, location, fuel, max_speed, tuv, manufacturer, crew, resources, capacity, janitor){
+	if(name == "" || tuv == "" || manufacturer == "" || capacity == "") return -1;
+	var amalg = name+location+fuel+max_speed+tuv+manufacturer+crew+resources+capacity+janitor;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "INSERT INTO SPACESHIPS (name, location, fuel, max_speed, tuv, manufacturer, crew, resources, capacity, janitor, timestamp) VALUES ( \""+ name + "\",\"" + location + "\"," + fuel + "," + max_speed + ",\"" + tuv + "\",\"" + manufacturer + "\"," + crew + ",\"" + resources + "\"," + capacity + "," + janitor + "," + getCurTime() + ");";
+	try{
+		var res = sqlite_request(db, sql);
+		sqlite_result_next(res);
+		return sqlite_result_get_length(res);
+	} catch e {
+		return -3;
+	}
+}
+$exports.createSpaceship = createSpaceship;
+
+var createMission = function(name, milestones, spaceships, planets, deadline, sponsor, reward, overseer){
+	if(name == "" || deadline == "" || sponsor == "" || reward == "") return -1;
+	var amalg = name+milestones+spaceships+planets+deadline+sponsor+reward+overseer;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "INSERT INTO MISSIONS (name, milestones, spaceships, planets, deadline, sponsor, reward, overseer, timestamp) VALUES (\""+ name + "\",\"" + milestones + "\",\"" + spaceships + "\",\"" + planets + "\"," + deadline + "," + sponsor + ",\"" + reward + "\"," + overseer +"," + getCurTime() + ");";
+	try{
+		var res = sqlite_request(db, sql);
+		sqlite_result_next(res);
+		return sqlite_result_get_length(res);
+	} catch e {
+                log_err(e);
+		return -3;
+	}
+}
+$exports.createMission = createMission;
+
+var updateByName = function(table, name, attr, nval){
+	var amalg = table+name+attr+nval;
+	if($not(isColumnOf(table, attr))) return -1;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "UPDATE " + table + " SET " + attr + " = \"" + nval + "\" WHERE name LIKE \"" + name + "\";";
+	try{
+		var res = sqlite_request(db, sql);
+		sqlite_result_next(res);
+		return sqlite_result_get_length(res);
+	} catch e {
+		return -3;
+	}
+}
+$exports.updateByName = updateByName;
+
+var updateById = function(table, id, attr, nval){
+	var amalg = table+id+attr+nval;
+	if($not(isColumnOf(table, attr))) return -1;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "UPDATE " + table + " SET " + attr + " = \"" + nval + "\" WHERE id = " + $int(id) + ";";
+	try{
+		var res = sqlite_request(db, sql);
+		sqlite_result_next(res);
+		return sqlite_result_get_length(res);
+	} catch e {
+		return -3;
+	}
+}
+$exports.updateById = updateById;
+
+
+var getByName = function(table, name){
+	var amalg = name+table;
+	if($not(checkInput(amalg))) return -2;
+	var sql = "SELECT * FROM " + table + " WHERE name = \"" + name + "\";";
+	var res;
+	var row;
+	try{
+		res = sqlite_request(db, sql);
+		row = sqlite_result_next(res);
+		while(sqlite_result_next(res) != null){}
+	} catch e {
+		return -3;
+	}
+	return row;
+}
+$exports.getByName = getByName;
+
+var fetchByFields = function(table, cols, whereCols, whereVals){
+	var i = 0;
+	while(i < $asize(whereVals)){
+		if($not(checkInput(whereVals[i]))) return null;
+		i = i+1;
+	}
+
+	var collist = "";
+	i = 0;
+	while(i < $asize(cols)){
+		if(i > 0) collist = collist + ", ";
+		collist = collist + cols[i];
+		i = i+1;
+	}
+
+	var where = "";
+	i = 0;
+	while(i < $asize(whereCols)){
+		if(i > 0) where = where + " AND ";
+		where = where + whereCols[i] + " LIKE \"" + whereVals[i] + "\"";
+		i = i+1;
+	}
+
+	var sql = "SELECT " + collist + " FROM " + table;
+	if($asize(whereCols) > 0) sql = sql + " WHERE " + where;
+	sql = sql + ";";
+
+	var res;
+	var rows = $amake(0);
+	try{
+		res = sqlite_request(db, sql);
+		var row = sqlite_result_next(res);
+		while(row != null){
+			rows = $aconcat($array(rows, $array(row)));
+			row = sqlite_result_next(res);
+		}
+	} catch e {
+		return null;
+	}
+	return rows;
+}
+$exports.fetchByFields = fetchByFields;
+
+var getById = function(table, id){
+	if($typeof(id) != $tint){
+            return null;
+        }
+	var sql = "SELECT * FROM " + table + " WHERE id = " + id + ";";
+	var res;
+	var row;
+	try{
+		res = sqlite_request(db, sql);
+		row = sqlite_result_next(res);
+		while(sqlite_result_next(res) != null){}
+	} catch e {
+		return null;
+	}
+	return row;
+}
+$exports.getById = getById;

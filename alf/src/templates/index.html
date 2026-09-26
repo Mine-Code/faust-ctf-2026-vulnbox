@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block hero_buttons %}
+  {% if not current_user.is_authenticated %}
+    <a href="/register" class="hero-button">Get Started</a>
+    <a href="/login" class="hero-button secondary">Login</a>
+  {% else %}
+    <a href="/convert_file" class="hero-button">Translate a File</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="features container">
+    <h2>Why Choose ALF?</h2>
+    <div class="feature-cards">
+        <div class="card">
+            <h3>Instant Translation</h3>
+            <p>Convert your human language documents to alien texts within seconds.</p>
+        </div>
+        <div class="card">
+            <h3>Secure & Private</h3>
+            <p>Your files are never shared and are processed safely on our servers.</p>
+        </div>
+        <div class="card">
+            <h3>Powered by Typst</h3>
+            <p>Powered by Typst, the modern typesetting system.</p>
+        </div>
+    </div>
+</section>
+
+<section class="cta container">
+    <h2>Ready to Explore Alien Languages?</h2>
+    <a href="/convert_file" class="cta-button">Start Translating</a>
+</section>
+
+<section class="features container">
+    <h2>Contact the ALF Team</h2>
+    <p>
+        Found a translation error? Have suggestions for new alien dialects?
+        Send us your input below.
+    </p>
+    <form action="contact_form" method="POST" class="form">
+            <div class="form-group">
+                <label for="email">Your Email</label>
+                <input id="email" name="email" required>
+            </div>
+
+        <div class="form-group">
+            <label for="message">Your Message</label>
+            <textarea
+                id="message"
+                name="message"
+                rows="5"
+                placeholder="Describe the issue, idea, or concern…"
+                required
+            ></textarea>
+        </div>
+
+        <button type="submit" class="cta-button">
+            Send Transmission
+        </button>
+    </form>
+</section>
+{% endblock %}
+

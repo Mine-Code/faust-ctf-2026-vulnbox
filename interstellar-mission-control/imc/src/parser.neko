@@ -1,0 +1,51 @@
+var utils = $loader.loadmodule("utils", $loader);
+var resp = $loader.loadmodule("responder", $loader);
+var create = $loader.loadmodule("create", $loader);
+var fetch = $loader.loadmodule("fetch", $loader);
+var update = $loader.loadmodule("update", $loader);
+
+var readline = $loader.loadprim("file@read_stdin_line", 2);
+var file_stdin = $loader.loadprim("file@file_stdin", 0);
+var file_eof = $loader.loadprim("file@file_eof", 1);
+var stdin = file_stdin();
+var MAXLINE = 4067;
+
+var handleRequest = function(){
+	// parse header
+	var line = $smake(MAXLINE);
+	readline(line, MAXLINE);
+	if(file_eof(stdin)) return -1;
+
+	var items = utils.splitAtChar(line,"|");
+
+	if(items[0] != "TVNI" || $asize(items) < 7){
+		var res;
+		res = resp.addErrorMessage(res, 1, "Invalid Message Header!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	var header = {
+		num_lines => $int(items[1]),
+		request_type => items[2],
+		time => items[3],
+		request_subject => items[4],
+		message_mode => items[5]
+	};
+
+	if(header.message_mode != "REQUEST") return -1;
+
+	var ctx = { header => header, line => line };
+
+	switch header.request_type {
+		"CREATE" => { return create.handle(ctx); }
+		"UPDATE" => { return update.handle(ctx); }
+		"FETCH" => { return fetch.handle(ctx); }
+		default => {
+                    var res = resp.addErrorMessage(null, 0, "Unknown request_type");
+                    resp.sendMessage(res);
+                    return -1;
+                }
+	}
+}
+$exports.handleRequest = handleRequest;

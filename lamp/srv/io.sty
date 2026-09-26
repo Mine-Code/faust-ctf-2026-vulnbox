@@ -1,0 +1,12 @@
+\newread{\stdin}
+\immediate\openin\stdin=|dos2unix
+% Seems to be deterministic, just hardcode it :)
+\def\stdinfileno{7}
+
+% Adapted from: https://tex.stackexchange.com/a/91624
+\newcommand{\savemode}{\chardef\previousinteractionmode=\interactionmode}
+\newcommand{\restoremode}{\interactionmode=\previousinteractionmode}
+
+% IO primitives
+\newcommand{\print}[1]{\savemode\nonstopmode\message{#1}\restoremode}
+\newcommand{\readln}[1]{\immediate\readline\stdin to #1\StrGobbleRight{#1}{1}[#1]}

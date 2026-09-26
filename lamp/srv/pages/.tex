@@ -1,0 +1,170 @@
+\begingroup
+  \catcode`&=11
+  \catcode`#=11
+  \catcode`!=6
+  \gdef\htmlucode!1{&#!1;}
+\endgroup
+\IfLoggedIn{
+  \input{/storage/\username{}.tex}
+  \newcommand{\pageTitle}{Ship "\shipname" <form method="POST" style="display: contents"><input type="hidden" name="action" value="tick" /><input type="submit" value="\htmlucode{8635} Refresh" style="width: max-content; padding: 0 0.5rem; margin: 0"/></form>}
+  \newcommand{\pageHeaderTitle}{Ship "\shipname"}
+}{
+  \newcommand{\pageTitle}{LAMP}
+}
+
+\newcommand{\additionalHeadTags}{
+	<link rel="stylesheet" href="index.css">
+    <script src="index.js"></script>
+}
+
+\newcommand{\actionAdd}{
+    \sqlescape{\username{}}{\usernameEscaped}
+    \sql{
+        UPDATE ships SET numComponents = numComponents + 1 WHERE username = "\usernameEscaped";
+    }{\ignore}
+    \sql{
+        SELECT id, numComponents FROM ships WHERE username = "\usernameEscaped";
+    }{\result}
+    \foreach \row in \result {
+        \sqlparserow{\row}{rowdata}
+        \sqlescape{\postx{}}{\xcoord}
+        \sqlescape{\posty{}}{\ycoord}
+        \sqlescape{\posttyp{}}{\type}
+        \ifnum\rowdata[1]<50
+            \sql{INSERT INTO components SET x = "\xcoord", y = "\ycoord", type = "\type", state = IF("\type" = "source", 1, 0), ship = \rowdata[0]}{\ignore}
+        \fi
+    }
+}
+
+\newcommand{\actionConnect}{
+    \sqlescape{\username{}}{\usernameEscaped}
+    \sql{
+        SELECT id FROM ships WHERE username = "\usernameEscaped";
+    }{\result}
+    \foreach \row in \result {
+        \sqlparserow{\row}{rowdata}
+        \edef\id####1{\rowdata[0]}
+        \sqlescape{\postleft{}}{\idleft}
+        \sqlescape{\postright{}}{\idright}
+        \sql{INSERT INTO connections (src, dst) SELECT "\idleft", "\idright" FROM components AS c1 JOIN components AS c2 ON c2.id = "\idright" WHERE c1.id = "\idleft" AND c1.ship = \id{} AND c2.ship = \id{}}{\ignore}
+    }
+}
+
+\newcommand{\actionToggle}{
+    \sqlescape{\username{}}{\usernameEscaped}
+    \sql{
+        SELECT id FROM ships WHERE username = "\usernameEscaped";
+    }{\result}
+    \foreach \row in \result {
+        \sqlparserow{\row}{rowdata}
+        \sqlescape{\postid{}}{\id}
+        \edef\id####1{\id}
+        \sql{UPDATE components SET properties = IF(properties = "on", "off", "on") WHERE id = "\id{}" AND type = "button" AND ship = \rowdata[0]}{\ignore}
+    }
+
+    % Tick one updates the button state
+    \actionTick{}
+    % Tick two updates connected components
+    \actionTick{}
+}
+
+\newcommand{\actionTick}{
+    \sqlescape{\username{}}{\usernameEscaped}
+    \sql{
+        SELECT id FROM ships WHERE username = "\usernameEscaped";
+    }{\result}
+    \foreach \row in \result {
+        \sqlparserow{\row}{rowdata}
+        \sql{UPDATE components c LEFT JOIN (SELECT w.dst AS id, MAX(s.state) AS anyOn FROM connections w JOIN components s ON s.id = w.src WHERE s.ship = \rowdata[0] GROUP BY w.dst) agg ON agg.id = c.id SET c.state = CASE c.type WHEN "light" THEN COALESCE(agg.anyOn, 0) WHEN "button" THEN IF(c.properties = "on" AND COALESCE(agg.anyOn, 0) = 1, 1, 0) ELSE c.state END WHERE c.ship = \rowdata[0] AND c.type <> "source"}{\ignore}
+    }
+}
+
+\newcommand{\pageBody}{
+  \IfLoggedIn{
+    \IfPOST{
+        \IfStrEq{\postaction{}}{\detokenize{add}}{
+            \actionAdd{}
+        }{}
+
+        \IfStrEq{\postaction{}}{\detokenize{connect}}{
+            \actionConnect{}
+        }{}
+
+        \IfStrEq{\postaction{}}{\detokenize{toggle}}{
+            \actionToggle{}
+        }{}
+
+        \IfStrEq{\postaction{}}{\detokenize{tick}}{
+            \actionTick{}
+        }{}
+
+    \gdef\responseStatus{302 FOUND}
+    \addHeader{Location: \httpPath{}}
+
+    }{}
+
+    \sqlescape{\username{}}{\usernameEscaped}
+    \sql{
+        SELECT id FROM ships WHERE username = "\usernameEscaped";
+    }{\result}
+    \foreach \row in \result {
+        \sqlparserow{\row}{rowdata}
+        \xdef\id####1{\rowdata[0]}
+    }
+    \output{<div id="ship-wrapper">}
+
+    \output{
+    <div id="components">
+        <input id="component-light" type="radio" name="component" value="light" checked /> <label for="component-light">Light</label>
+        <input id="component-button" type="radio" name="component" value="button"> <label for="component-button">Button</label>
+        <input id="component-source" type="radio" name="component" value="source"> <label for="component-source">Source</label>
+        <br />
+        <label><input type="checkbox" id="connect-mode" /> Connect mode</label>
+    </div>
+    }
+
+    \output{<div id="canvas" data-tooltip="Click to add">}
+    \sql{
+        SELECT c1.x, c1.y, c2.x, c2.y, c1.state FROM connections JOIN components AS c1 ON src = c1.id join components AS c2 ON dst = c2.id WHERE c1.ship = \id{} AND c2.ship = \id{};
+    }{\linesdata}
+    \foreach \rowline in \linesdata {
+        \sqlparserow{\rowline}{coords}
+        \def\state{off}
+        \ifnum\coords[4]=1
+            \def\state{on}
+        \fi
+        \output{<div class="line \state" data-x1="\coords[0]" data-y1="\coords[1]" data-x2="\coords[2]" data-y2="\coords[3]"></div>}
+    }
+    \sql{
+        SELECT id, x, y, type, state, properties FROM components WHERE ship = \id;
+    }{\components}
+    \foreach \c in \components {
+        \sqlparserow{\c}{compdata}
+        \def\state{off}
+        \ifnum\compdata[4]=1
+            \def\state{on}
+        \fi
+        \edef\x{\compdata[1]}
+        \edef\y{\compdata[2]}
+        \edef\properties####1{\compdata[5]}
+        \edef\type####1{\compdata[3]}
+        \IfStrEq{\type{}}{button}{
+            \unstyledform{
+                \output{<span class="component-wrap" data-id="\compdata[0]" style="position: absolute; left: \x px; top: \y px;"><input class="component \type{} \state" data-properties="\properties{}" type="submit" style="--img: url('/components/\type{}_\state.svg');margin: 0; padding: 0;" value="" /></span>}
+                \formhidden{action}{toggle}
+                \formhidden{id}{\compdata[0]}
+            }
+        }{
+            \output{<span class="component-wrap" data-id="\compdata[0]" style="position: absolute; left: \x px; top: \y px;"><input class="component \type{} \state" data-properties="\properties{}" type="submit" style="--img: url('/components/\type{}_\state.svg');cursor: default; margin: 0; padding: 0;" value="" /></span>}
+        }
+    }
+    \output{
+        </div>
+    </div>
+    }
+  }{
+    \paragraph{\link{/login}{Log in} or \link{/register}{register}} to manage your ship
+  }
+}
+
+\input{components/layout.tex}

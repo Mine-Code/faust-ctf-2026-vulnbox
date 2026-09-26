@@ -1,0 +1,80 @@
+var utils = $loader.loadmodule("utils", $loader);
+
+var date_now = $loader.loadprim("date@date_now", 0);
+var date_format = $loader.loadprim("date@date_format", 2);
+
+var nn = function(v){ return if(v == null) "" else v; }
+
+var sendMessage = function(msg_array){
+	var header = "TVNI|" + $asize(msg_array) + "||" + date_format(date_now(), "^%m^^%H^^%d^^%M^^%Y^") + "||RESPONSE|";
+
+	$print(header + "\n");
+	var i = 0;
+	while(i < $asize(msg_array)){
+		$print(msg_array[i] + "\n");
+		i = i+1;
+	}
+}
+$exports.sendMessage = sendMessage
+
+var addIdentityHeader = function(array, id, name, auth){
+	if(array == null) array = $array();
+	return $aconcat($array(array, $array("SURI|" + id + "|" + name + "|" + auth)));
+}
+$exports.addIdentityHeader = addIdentityHeader
+
+var addBeingHeader = function(array, id, name, age, remaining_lives, affiliation, crew_id, diseases, skills){
+	if(array == null) array = $array();
+	return $aconcat($array(array, $array("QkRS|" + nn(id) + "|" + nn(name) + "|" + nn(age) + "|" + nn(remaining_lives) + "|" + nn(affiliation) + "|" + nn(crew_id) + "|" + nn(diseases) + "|" + nn(skills))));
+}
+$exports.addBeingHeader = addBeingHeader
+
+var addCrewHeader = function(array, id, name, captain, allowance, equipment){
+	if(array == null) array = $array();
+	return $aconcat($array(array, $array("Q0RS|" + nn(id) + "|" + nn(name) + "|" + nn(captain) + "|" + nn(allowance) + "|" + nn(equipment) + "|")));
+}
+$exports.addCrewHeader = addCrewHeader
+
+
+var addMissionHeader = function(array, id, name, milestones, spaceships, planets, deadline, sponsor, rewards, overseer){
+	if(array == null) array = $array();
+	return $aconcat($array(array, $array("TVNE|" + nn(id) + "|" + nn(name) + "|" + nn(milestones) + "|" + nn(spaceships) + "|" + nn(planets) + "|" + nn(deadline) + "|" + nn(sponsor) + "|" + nn(rewards) + "|" + nn(overseer))));
+}
+$exports.addMissionHeader = addMissionHeader
+
+var addSpaceshipHeader = function(array, id, name, location, fuel, max_speed, tuv, manufacturer, crew, resources, capacity, janitor){
+	if(array == null) array = $array();
+	return $aconcat($array(array, $array("U0RS|" + nn(id) + "|" + nn(name) + "|" + nn(location) + "|" + nn(fuel) + "|" + nn(max_speed) + "|" + nn(tuv) + "|" + nn(manufacturer) + "|" + nn(crew) + "|" + nn(resources) + "|" + nn(capacity) + "|" + nn(janitor))));
+}
+$exports.addSpaceshipHeader = addSpaceshipHeader
+
+
+var addErrorMessage = function(array, mode, message){
+	if(array == null) array = $array();
+	return $aconcat($array(array, $array("RVJS|" + mode + "|" + message)));
+}
+$exports.addErrorMessage = addErrorMessage
+
+var rowToDescriptor = function(tag, cols, row){
+	var line = tag;
+	var i = 0;
+	while(i < $asize(cols)){
+		var v = $objget(row, $hash(cols[i]));
+		var s = if(v == null) "" else $string(v);
+		line = line + "|" + s;
+		i = i+1;
+	}
+	return line;
+}
+$exports.rowToDescriptor = rowToDescriptor
+
+var sendResponse = function(msg_array, req_type, subject){
+	var header = "TVNI|" + $asize(msg_array) + "|" + req_type + "|" + date_format(date_now(), "^%m^^%H^^%d^^%M^^%Y^") + "|" + subject + "|RESPONSE|";
+	$print(header + "\n");
+	var i = 0;
+	while(i < $asize(msg_array)){
+		$print(msg_array[i] + "\n");
+		i = i+1;
+	}
+}
+$exports.sendResponse = sendResponse

@@ -1,0 +1,34 @@
+version: '2.2'
+services:
+  alf:
+    image: faust.cs.fau.de:5000/alf
+    build: .
+    depends_on:
+      - db
+    ports:
+      - 1986:1986
+    environment:
+      DATA_PATH: /app/data
+      DB_URL: postgresql://user:password@db:5432/mydb
+    restart: unless-stopped
+    volumes:
+      - alf_app_data:/app/data/
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
+    restart: unless-stopped
+    volumes:
+      - alf_db_data:/var/lib/postgresql/data
+volumes:
+  alf_db_data: null
+  alf_app_data: null
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: fd42:d0ce:1986::/64

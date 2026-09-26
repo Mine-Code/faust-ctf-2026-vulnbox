@@ -1,0 +1,59 @@
+\usepackage{xstring}
+\usepackage{pgffor}
+
+\newwrite{\sqlfile}
+\newread{\sqlresult}
+\newtoks\temptoksi
+\newtoks\temptoksii
+\newcommand{\sql}[2]{
+  \immediate\openout\sqlfile=sqltmp
+  \immediate\write\sqlfile{#1}
+  \immediate\closeout\sqlfile{}
+  \immediate\write18{mariadb --protocol tcp --ssl=false -h \sqlhost{} -u \sqluser{} -p\sqlpassword{} \database{} --silent < sqltmp.tex > sqloutput.tex}
+  \immediate\openin\sqlresult=sqloutput
+  \def#2{}
+  \def\oldtabcode{\the\catcode9}
+  \edef\oldendline{\the\endlinechar}
+  \catcode9=11
+  \endlinechar=-1
+  \loop
+    \immediate\read\sqlresult to \tmpsqlline
+    \temptoksi\expandafter{#2}
+    \temptoksii\expandafter{\tmpsqlline}
+    \if\relax\the\temptoksii\relax\else
+      \if\relax\the\temptoksi\relax\else
+        \temptoksi\expandafter{\the\temptoksi,}
+      \fi
+      \edef #2{\the\temptoksi{\the\temptoksii}}
+    \fi
+  \unless\ifeof\sqlresult
+  \repeat
+  \catcode9=\oldtabcode
+  \endlinechar=\oldendline
+  \immediate\closein\sqlresult
+}
+
+\begingroup
+\catcode9=11
+\gdef\tab{	}
+\endgroup
+
+\newcommand{\sqlparserow}[2]{
+  \newcount\sqlparserowX
+  \sqlparserowX=0
+  \edef\tmpsqlremaining{#1}
+  \loop
+  \StrCut[1]{\tmpsqlremaining}{\tab}{\tmpsqlcurrent}{\tmpsqlremaining}
+  \expandafter\edef\csname#2\the\sqlparserowX\endcsname{\tmpsqlcurrent}
+  \unless\ifx\tmpsqlremaining\empty
+    \advance \sqlparserowX by 1
+  \repeat
+  \expandafter\def\csname#2\endcsname[##1]{\csname#2##1\endcsname}
+}
+
+\StrChar{\string\f}{1}[\stringbackslash]
+\newcommand{\sqlescape}[2]{
+  \StrSubstitute{#1}{\stringbackslash}{\string\\}[#2]
+  \StrSubstitute{#2}{\string"}{\string\"}[#2]
+  \StrSubstitute{#2}{\string'}{\string\'}[#2]
+}

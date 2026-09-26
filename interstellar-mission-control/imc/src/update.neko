@@ -1,0 +1,143 @@
+var utils = $loader.loadmodule("utils", $loader);
+var resp = $loader.loadmodule("responder", $loader);
+var db = $loader.loadmodule("db",$loader);
+var log_err = $loader.loadprim("file@log_err", 1);
+
+var readline = $loader.loadprim("file@read_stdin_line", 2);
+var MAXLINE = 4067;
+
+var UPDATE_SPEC = {
+	BEING => { table => "BEINGS", tag => "QkRS",
+		cols => $array("id","name","age","remaining_lives","affiliation","crew","diseases","skills"),
+		updateable => $array("age","remaining_lives","affiliation","crew","diseases","skills"),
+                auth => function(being, row) {return being.id==row.id}},
+	CREW => { table => "CREWS", tag => "Q0RS",
+		cols => $array("id","name","captain","allowance","equipment","invited"),
+		updateable => $array("allowance","equipment", "invited"),
+                auth => function(being, row) {return being.id==row.captain}},
+	MISSION => { table => "MISSIONS", tag => "TVNE",
+		cols => $array("id","name","milestones","spaceships","planets","deadline","sponsor","reward","overseer"),
+		updateable => $array("spaceships","planets","deadline","reward","overseer"),
+                auth => function(being, row) {return being.id==row.overseer || being.id==row.sponsor}},
+	SPACESHIP => { table => "SPACESHIPS", tag => "U0RS",
+		cols => $array("id","name","location","fuel","max_speed","tuv","manufacturer","crew","resources","capacity","janitor"),
+		updateable => $array("location","fuel","max_speed","tuv","manufacturer","crew","resources","capacity"),
+                auth => function(being, row) {return (being.crew!=null && being.crew==row.crew) || being.id == row.janitor}}
+};
+
+var authenticate = function(identity){
+	if(identity == null) return null;
+	var being = db.getByName("BEINGS", identity.name);
+	if(being == null || being <= 0) return null;
+	if(being.authenticator != identity.auth || being.id != identity.id) return null;
+	return being;
+}
+
+var readSegments = function(ctx, tag){
+	var identity = null;
+	var descriptor = null;
+	var i = 0;
+	while(i < ctx.header.num_lines){
+		readline(ctx.line, MAXLINE);
+		var items = utils.splitAtChar(ctx.line, "|");
+		if(items[0] == "SURI"){
+			identity = {
+				id => items[1],
+				name => items[2],
+				auth => items[3]
+			};
+		}
+		if(tag != "" && items[0] == tag){
+			descriptor = items;
+		}
+		i = i+1;
+	}
+	return { identity => identity, descriptor => descriptor };
+}
+
+var handleUpdate = function(ctx){
+	var spec = $objget(UPDATE_SPEC, $hash(ctx.header.request_subject));
+	var tag = if(spec == null) "" else spec.tag;
+
+	var seg = readSegments(ctx, tag);
+	var identity = seg.identity;
+	var descriptor = seg.descriptor;
+
+	if(spec == null){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Unknown update subject"));
+		return -1;
+	}
+        
+	var being = authenticate(identity);
+	if(being == null){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Authentication failed!"));
+		return -1;
+	}
+
+	if(descriptor == null){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Missing Descriptor"));
+		return -1;
+	}
+
+        var id = descriptor[1];
+	if(id == null || id == ""){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Missing ID"));
+		return -1;
+	}
+	var row = db.getById(spec.table, $int(id));
+        if (row == null) {
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Cant find entry with ID " + id));
+		return -1;
+	}
+	if($not(spec.auth(being, row))){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Not privileged to update this"));
+		return -1;
+        }
+	var cols = spec.cols;
+	var i = 1;
+	while(i < $asize(cols)){
+		if(i+1 < $asize(descriptor)){
+			var v = descriptor[i+1];
+			if(v != "" && v != null){
+                                if($not(utils.arrayContains(spec.updateable, cols[i]))) {
+		                    resp.sendMessage(resp.addErrorMessage(null, 1, "Cant update field " + cols[i]));
+		                    return -1;
+                                }
+                                if(spec.table == "BEINGS" && cols[i] == "crew"){
+                                    try {
+                                        var crew = db.getById("CREWS", $int(v));
+                                        if($not(utils.strListContains(crew.invited, id))){
+                                                resp.sendMessage(resp.addErrorMessage(null, 1, "Cant join crew!"));
+                                                return -1;
+                                        }
+                                        var new_invites;
+                                        new_invites = utils.removeFromStrList(crew.invited, id);
+                                        if((db.updateById("CREWS", $int(v), "invited", new_invites)) < 0) {
+                                            resp.sendMessage(resp.addErrorMessage(null, 1, "Update failed"));
+                                            return -1;
+                                        }
+                                    } catch e {
+                                        resp.sendMessage(resp.addErrorMessage(null, 1, "Unable to join crew!"));
+                                    }
+                                }
+                                if((db.updateById(spec.table, id, cols[i], v)) < 0) {
+		                    resp.sendMessage(resp.addErrorMessage(null, 1, "Update failed"));
+		                    return -1;
+                                }
+			}
+		}
+		i = i+1;
+	}
+	var row = db.getById(spec.table, $int(id));
+        if (row == null) {
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Cant find entry with ID " + id));
+		return -1;
+	}
+
+	var out = $amake(0);
+	out = resp.addIdentityHeader(out, identity.id, identity.name, identity.auth);
+	out = $aconcat($array(out, $array(resp.rowToDescriptor(spec.tag, cols, row))));
+	resp.sendResponse(out, "UPDATE", ctx.header.request_subject);
+	return 0;
+}
+$exports.handle = handleUpdate;

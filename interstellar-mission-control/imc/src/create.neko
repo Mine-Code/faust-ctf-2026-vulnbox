@@ -1,0 +1,293 @@
+var utils = $loader.loadmodule("utils", $loader);
+var resp = $loader.loadmodule("responder", $loader);
+var db = $loader.loadmodule("db",$loader);
+
+var readline = $loader.loadprim("file@read_stdin_line", 2);
+var MAXLINE = 4067;
+
+var readSegments = function(ctx, tag){
+	var identity = null;
+	var descriptor = null;
+	var i = 0;
+	while(i < ctx.header.num_lines){
+		readline(ctx.line, MAXLINE);
+		var items = utils.splitAtChar(ctx.line, "|");
+		if(items[0] == "SURI"){
+			identity = {
+				id => items[1],
+				name => items[2],
+				auth => items[3]
+			};
+		}
+		if(tag != "" && items[0] == tag){
+			descriptor = items;
+		}
+		i = i+1;
+	}
+	return { identity => identity, descriptor => descriptor };
+}
+
+var authenticate = function(identity){
+	if(identity == null) return null;
+	var being = db.getByName("BEINGS", identity.name);
+	if(being == null || being <= 0) return null;
+	if(being.authenticator != identity.auth || being.id != identity.id) return null;
+	return being;
+}
+
+var handleCreateBeing = function(ctx){
+	var seg = readSegments(ctx, "QkRS");
+	var identity = seg.identity;
+	var being = null;
+	if(seg.descriptor != null){
+		being = {
+			id => seg.descriptor[1],
+			name => seg.descriptor[2],
+			age => seg.descriptor[3],
+			remaining_lives => seg.descriptor[4],
+			affiliation => seg.descriptor[5],
+			crew_id => seg.descriptor[6],
+			diseases => seg.descriptor[7],
+			skills => seg.descriptor[8]
+		};
+	}
+
+	if(identity == null){
+		var res = resp.addErrorMessage(null, 0, "Missing Identity Header!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(identity.id != "" || identity.auth != ""){
+		var res = resp.addErrorMessage(null, 0, "Wrong Identity Descriptor");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	identity.auth = utils.randString(20);
+	if(being == null){
+		var res = resp.addErrorMessage(null, 0, "Missing Being Descriptor");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(db.addBeing(being.name, identity.auth, being.age, being.remaining_lives, being.affiliation, being.diseases, being.skills) < 0){
+		var res = resp.addErrorMessage(null, 0, "Couldnt insert being");
+		resp.sendMessage(res);
+		return -1;
+	}else{
+		var being = db.getByName("BEINGS", being.name);
+		if(being < 0 || being == null){
+			var res = resp.addErrorMessage(null, 0, "Couldnt find being");
+			resp.sendMessage(res);
+			return -1;
+		}
+		var res = resp.addIdentityHeader(null, being.id, being.name, being.authenticator);
+		res = resp.addBeingHeader(res, being.id, being.name, being.age, being.remaining_lives, being.affiliation, being.crew_id, being.diseases, being.skills);
+		resp.sendMessage(res);
+		return 0;
+	}
+}
+
+var handleCreateCrew = function(ctx){
+	var seg = readSegments(ctx, "Q0RS");
+	var identity = seg.identity;
+	var crew = null;
+	if(seg.descriptor != null){
+		crew = {
+			id => seg.descriptor[1],
+			name => seg.descriptor[2],
+			captain => seg.descriptor[3],
+			allowance => seg.descriptor[4],
+			equipment => seg.descriptor[5],
+			invited => ""
+		};
+	}
+
+	if(identity == null){
+		var res = resp.addErrorMessage(null, 0, "Missing Identity Header!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(crew == null){
+		var res = resp.addErrorMessage(null, 0, "Missing Crew Descriptor");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(crew.name == "" || crew.allowance == "" || $asize(seg.descriptor) != 6){
+		var res = resp.addErrorMessage(null, 0, "Wrong Crew Descriptor!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	var auth = authenticate(identity);
+	if(auth == null){
+		var res = resp.addErrorMessage(null, 0, "Authentication failed!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(db.createCrew(crew.name, identity.id, crew.allowance, crew.equipment) <= 0){
+		var res = resp.addErrorMessage(null, 0, "Couldnt insert crew");
+		resp.sendMessage(res);
+		return -1;
+	}else{
+		var db_crew = db.getByName("CREWS", crew.name);
+		if(db_crew <= 0 || db_crew == null){
+			var res = resp.addErrorMessage(null, 0, "Couldnt find crew");
+			resp.sendMessage(res);
+			return -1;
+		}
+		var res = resp.addIdentityHeader(null, auth.id, auth.name, auth.authenticator);
+		res = resp.addCrewHeader(res, db_crew.id, db_crew.name, db_crew.captain, db_crew.allowance, db_crew.equipment);
+		resp.sendMessage(res);
+		return 0;
+	}
+}
+
+var handleCreateMission = function(ctx){
+	var seg = readSegments(ctx, "TVNE");
+	var identity = seg.identity;
+	var mission = null;
+	if(seg.descriptor != null){
+		mission = {
+			id => seg.descriptor[1],
+			name => seg.descriptor[2],
+			milestones => seg.descriptor[3],
+			spaceships => seg.descriptor[4],
+			planets => seg.descriptor[5],
+			deadline => seg.descriptor[6],
+			sponsor => seg.descriptor[7],
+			rewards => seg.descriptor[8],
+			overseer => seg.descriptor[9]
+		};
+	}
+
+	if(identity == null){
+		var res = resp.addErrorMessage(null, 0, "Missing Identity Header!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(mission == null){
+		var res = resp.addErrorMessage(null, 0, "Missing Mission Descriptor");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(mission.name == "" || mission.milestones == "" || mission.planets == "" || mission.deadline == "" || mission.rewards == "" || mission.overseer == "" || $asize(seg.descriptor) != 10){
+		var res = resp.addErrorMessage(null, 0, "Wrong Mission Descriptor");
+		resp.sendMessage(res);
+		return -1;
+	}
+	var auth = authenticate(identity);
+	if(auth == null){
+		var res = resp.addErrorMessage(null, 0, "Authentication failed!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(db.createMission(mission.name, mission.milestones, mission.spaceships, mission.planets, mission.deadline, auth.id, mission.rewards, mission.overseer) <= 0){
+		var res = resp.addErrorMessage(null, 0, "Couldnt insert Mission");
+		resp.sendMessage(res);
+		return -1;
+	}else{
+		var db_mission = db.getByName("MISSIONS", mission.name);
+		if(db_mission <= 0 || db_mission == null){
+			var res = resp.addErrorMessage(null, 0, "Couldnt find mission");
+			resp.sendMessage(res);
+			return -1;
+		}
+		var res = resp.addIdentityHeader(null, auth.id, auth.name, auth.authenticator);
+		res = resp.addMissionHeader(res, db_mission.id, db_mission.name, db_mission.milestones, db_mission.spaceships, db_mission.planets, db_mission.deadline, db_mission.sponsor, db_mission.reward, db_mission.overseer);
+		resp.sendMessage(res);
+		return 0;
+	}
+}
+
+var handleCreateSpaceship = function(ctx){
+	var seg = readSegments(ctx, "U0RS");
+	var identity = seg.identity;
+    var spaceship = null;
+	if(seg.descriptor != null){
+		spaceship = {
+            id => seg.descriptor[1],
+			name => seg.descriptor[2],
+			location => seg.descriptor[3],
+			fuel => seg.descriptor[4],
+			max_speed => seg.descriptor[5],
+			tuv => seg.descriptor[6],
+			manufacturer => seg.descriptor[7],
+			crew => seg.descriptor[8],
+			resources => seg.descriptor[9],
+			capacity => seg.descriptor[10]
+			janitor => seg.descriptor[11]
+		};
+	} else {
+		var res = resp.addErrorMessage(null, 0, "Could not read Spaceship Descriptor!");
+		resp.sendMessage(res);
+		return -1
+	}
+	if(identity == null){
+		var res = resp.addErrorMessage(null, 0, "Missing Identity Header!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+	if(spaceship.name == "" || spaceship.fuel == "" || spaceship.tuv == "" || spaceship.manufacturer == "" || spaceship.capacity == "" || $asize(seg.descriptor) != 12){
+		var res = resp.addErrorMessage(null, 0, "Wrong Spaceship Descriptor!");
+		resp.sendMessage(res);
+		return -1;
+	}
+	var auth = authenticate(identity);
+	if(auth == null){
+		var res = resp.addErrorMessage(null, 0, "Authentication failed!");
+		resp.sendMessage(res);
+		return -1;
+	}
+
+    var crew;
+    if(spaceship.crew != ""){
+        crew = db.getById("CREWS", $int(spaceship.crew));
+        if(crew == null || crew.captain != auth.id){
+	        var res = resp.addErrorMessage(null, 0, "Unable to add crew to spaceship!");
+	        resp.sendMessage(res);
+	        return -1;
+        }
+    }
+    var result = db.createSpaceship(spaceship.name, spaceship.location, spaceship.fuel, spaceship.max_speed, spaceship.tuv, spaceship.manufacturer, if (crew==null) null else crew.id, spaceship.resources, spaceship.capacity, $int(spaceship.janitor));
+    if(result<= 0){
+		var res = resp.addErrorMessage(null, 0, "Could not create spaceship!");
+		resp.sendMessage(res);
+		return -1;
+    }
+
+	var db_spaceship = db.getByName("SPACESHIPS", spaceship.name);
+        if(db_spaceship <=0 || db_spaceship == null){
+			var res = resp.addErrorMessage(null, 0, "Could not find spaceship!");
+			resp.sendMessage(res);
+			return -1;
+    }
+
+	var res = resp.addIdentityHeader(null, auth.id, auth.name, auth.authenticator);
+	res = resp.addSpaceshipHeader(res, db_spaceship.id, db_spaceship.name, db_spaceship.location, db_spaceship.fuel, db_spaceship.max_speed, db_spaceship.tuv, db_spaceship.manufacturer, db_spaceship.crew, db_spaceship.resources, db_spaceship.capacity, db_spaceship.janitor);
+	resp.sendMessage(res);
+
+    return 0;
+}
+
+var ROUTES = {
+	BEING => handleCreateBeing,
+	CREW => handleCreateCrew,
+	MISSION => handleCreateMission,
+	SPACESHIP => handleCreateSpaceship
+};
+
+var handle = function(ctx){
+	var h = $objget(ROUTES, $hash(ctx.header.request_subject));
+	if(h == null){ $print("default"); return -1; }
+	return h(ctx);
+}
+$exports.handle = handle;

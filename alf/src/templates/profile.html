@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<section class="profile-container container">
+    <h2>Your Profile</h2>
+
+    <div class="profile-card">
+        <div class="profile-field">
+            <span class="field-label">Username:</span>
+            <span class="field-value">{{ current_user.username }}</span>
+        </div>
+        <div class="profile-field">
+            <span class="field-label">User-Id:</span>
+            <span class="field-value">{{ current_user.id }}</span>
+        </div>
+    </div>
+
+    <div class="profile-actions">
+        <a href="/convert_file" class="action-button">Translate a File</a>
+        <a href="/logout" class="action-button secondary">Logout</a>
+    </div>
+</section>
+{% endblock %}
+

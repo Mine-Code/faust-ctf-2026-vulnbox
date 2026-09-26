@@ -1,0 +1,56 @@
+\batchmode
+\documentclass{article}
+\newcommand{\redishost}[1]{redis}
+\usepackage{redis}
+
+\newcommand{\sqlhost}[1]{mariadb}
+\newcommand{\database}[1]{lamp}
+\newcommand{\sqluser}[1]{nonprivileged}
+\newcommand{\sqlpassword}[1]{nonprivileged}
+\usepackage{sql}
+
+\usepackage{definitions}
+\usepackage{expl3}
+
+\newcommand{\httpStatic}{/srv/www/}
+\usepackage{http}
+
+\redisOpen
+
+\newcommand{\sessionCreate}{
+  \begingroup
+  \newread{\tmpfd}
+  \immediate\openin\tmpfd=|/srv/gensessionid.sh
+  \immediate\readline\tmpfd to \sessionId
+  \immediate\closein\tmpfd
+  \StrGobbleRight{\sessionId}{1}[\sessionId]
+  \httpCookieAdd{Session=\sessionId}
+  \redisSetEx{session_active_\sessionId}{1}{\sessionTimeout}
+  \xdef\sessionId##1{\sessionId}
+  \endgroup
+}
+
+\newcommand{\authMiddleware}[1]{
+  \ifdefined\cookieSession
+    \begingroup
+    \redisGet{session_active_\cookieSession{}}{\sessionActive}
+    \ifdefined\sessionActive
+      \xdef\sessionId##1{\cookieSession{}}
+      \redisGet{session_user_\cookieSession{}}{\username}
+    \else
+      % Session expired, create a new session
+      \sessionCreate{}
+    \fi
+    \endgroup
+  \else
+    \sessionCreate{}
+  \fi
+  #1
+}
+
+\newcommand{\IfLoggedIn}[2]{\ifdefined\username#1\else#2\fi}
+
+\httpMiddlewareUse{\authMiddleware}
+\httpServe{}
+
+\redisClose

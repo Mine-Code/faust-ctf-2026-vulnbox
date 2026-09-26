@@ -1,0 +1,38 @@
+version: "2.2"
+
+services:
+  latex:
+    image: faust.cs.fau.de:5000/lamp
+    ports:
+      - 1337:1337
+    volumes:
+      - ./srv:/srv:ro
+      - storage:/storage
+  cleanup:
+    image: faust.cs.fau.de:5000/lamp
+    entrypoint: /cleanup.sh
+    volumes:
+      - ./srv:/srv:ro
+      - storage:/storage
+  redis:
+    image: redis
+  mariadb:
+    image: mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: lamp
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db:/var/lib/mysql
+
+volumes:
+    storage:
+    db:
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+        driver: default
+        config:
+            - subnet: "fd42:d0ce:7777::/64"

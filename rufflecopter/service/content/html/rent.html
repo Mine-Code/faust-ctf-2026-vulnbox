@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Rufflecopter Spaceship Rental</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body style="background-color: rgb(148, 192, 235)">
+    <marker:navbar></marker:navbar>
+    <div class="container-sm mt-5 p-3 bg-light rounded-3">
+      <marker:successmsg></marker:successmsg>
+
+      <form action="/rent" method="post">
+        <div class="row mb-4">
+          <div class="col-6">
+            <label for="firstname" class="form-label">Pilot's first name</label>
+            <input
+              type="text"
+              class="form-control"
+              id="firstname"
+              name="firstname"
+              required
+            />
+          </div>
+          <div class="col-6">
+            <label for="lastname" class="form-label">Pilot's last name</label>
+            <input
+              type="text"
+              class="form-control"
+              id="lastname"
+              name="lastname"
+              required
+            />
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-6">
+            <label for="startdate" class="form-label">Pick-up date</label>
+            <input
+              type="date"
+              class="form-control"
+              id="startdate"
+              name="startdate"
+              required
+            />
+          </div>
+          <div class="col-6">
+            <label for="enddate" class="form-label">Drop-off date</label>
+            <input
+              type="date"
+              class="form-control"
+              id="enddate"
+              name="enddate"
+              required
+            />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="comments" class="form-label">Comments</label>
+          <textarea
+            class="form-control"
+            id="comments"
+            name="comments"
+            maxlength=106
+            required
+          ></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Order</button>
+      </form>
+    </div>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>

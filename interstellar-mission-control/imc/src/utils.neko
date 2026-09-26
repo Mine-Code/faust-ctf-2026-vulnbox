@@ -1,0 +1,133 @@
+var file_open = $loader.loadprim("file@file_open", 2);
+var file_read_char = $loader.loadprim("file@file_read_char", 1);
+var log_err = $loader.loadprim("file@log_err", 1);
+
+
+var randString = function(size){
+	var rnd_file = file_open("/dev/urandom", "rb");
+
+	var rand_name = $smake(size);
+
+	var i = 0;
+	while(i < $ssize(rand_name)){
+		var char = file_read_char(rnd_file);
+
+		if((char >= 97 && char <= 122) || (char >= 65 && char <= 90) || (char >= 48 && char <= 57)){
+			$sset(rand_name, i, char);
+			i = i+1;
+		}
+	}
+	rand_name
+}
+$exports.randString = randString;
+
+var addToStrList = function(list, item){
+	var res = $smake($ssize(list) + 2 + $ssize(item))
+	res = list + "^" + item + "^";
+	res
+}
+$exports.addToStrList = addToStrList;
+
+var arrayContains = function(a, value){
+        var i = 0;
+        while (i < $asize(a)) {
+                if (a[i] == value)
+                        return true;
+                i = i + 1;
+        }
+        return false;
+}
+$exports.arrayContains = arrayContains;
+
+var strListContains = function(list, item){
+        if(list == null || $ssize(list) == 0) return false;
+	var searchS = "^" + item + "^";
+	return $sfind(list, 0, searchS) != null;
+}
+$exports.strListContains = strListContains;
+
+
+var removeFromStrList = function(list, item){
+        
+	var searchS = "^" + item + "^";
+	var idx = $sfind(list, 0, searchS);
+	var res;
+	try{
+		res = $ssub(list, 0, idx) + $ssub(list, idx + $ssize(searchS), $ssize(list) - (idx + $ssize(searchS)));
+	} catch e {
+		$print("Error could not find item in str list\n");
+		return -1;
+	}
+	res
+}
+$exports.removeFromStrList = removeFromStrList;
+
+var getIdxFromStrList = function(list, idx){
+	idx = idx+1;
+	var len = $ssize(list);
+	if (len == 0){
+		return list;
+	}
+	var start_idx;
+	var end_idx;
+	var found_dots = 0;
+	var i = 0;
+	while(i < $ssize(list) && idx >= 0){
+		if($sget(list, i) == 94){
+			
+			if(((found_dots+1) % 2) == 0){
+				end_idx = i;
+				idx = idx - 1;
+			}else{
+				start_idx = i;
+			}
+			found_dots = found_dots + 1;
+
+			if(idx == 0){
+				try{
+					return $ssub(list, start_idx+1, end_idx-start_idx-1);
+				} catch e {
+					return -1;
+				}
+			}
+		}
+		i = i + 1;
+	}
+	return -1;
+}
+$exports.getIdxFromStrList = getIdxFromStrList;
+
+var splitAtChar = function(string, char){
+	char = $sget(char,0);
+	var count = 0;
+	var i = 0;
+	while(i < $ssize(string)){
+		if($sget(string, i) == 0) break;
+		if($sget(string, i) == char) count = count + 1;
+		i = i + 1;
+	}
+
+	i = 0;
+	var array = $amake(count+1);
+	var foundchars = 0;
+	
+	var idx = 0;
+	var start_idx = 0;
+	var end_idx;
+	while(i < $ssize(string)){
+		
+		if($sget(string, i) == char || $sget(string, i) == 0){
+			
+			end_idx = i;
+			array[idx] = $ssub(string, start_idx, end_idx-start_idx);
+			idx = idx + 1;
+			start_idx = end_idx + 1;
+			if($sget(string, i) == 0) return array;
+			foundchars = foundchars + 1;
+		}
+
+		i = i + 1;
+	}
+	return array;
+}
+$exports.splitAtChar = splitAtChar;

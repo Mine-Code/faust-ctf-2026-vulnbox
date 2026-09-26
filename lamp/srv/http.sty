@@ -1,0 +1,326 @@
+\usepackage{xstring}
+\usepackage{verbatim}
+\usepackage{hex}
+\usepackage{fp}
+\usepackage{io}
+\usepackage{catchfile}
+\usepackage{expl3}
+
+% make - usable in macro names (for http headers)
+\catcode`-=11
+
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% Utils %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begingroup
+\catcode`\%=12
+\gdef\urldecodeseparator{%}
+\gdef\textpercent{%}
+\endgroup
+
+\newcommand{\urldecode}[2]{
+  \edef\tmp{#1}
+  \gdef#2{}
+  \loop
+  \StrCut[1]{\tmp}{\urldecodeseparator}{\prev}{\tmp}
+  \xdef#2{#2\prev}
+  \unless\ifx\tmp\empty
+    \StrLeft{\tmp}{2}[\hexnum]
+    \StrGobbleLeft{\tmp}{2}[\tmp]
+    \ifhexchar{\hexnum}{
+        \unhex{\hexnum}{\hexnum}
+        \xdef#2{#2\hexnum}
+      }
+      {
+        \xdef#2{#2\%\a\b}
+      }
+  \repeat
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%% Request %%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\httpParseLine}{
+  \readln{\httpLine}
+  \StrCut[1]{\httpLine}{ }{\httpMethod}{\httpLine}
+  \StrCut[1]{\httpLine}{ }{\httpPath}{\httpVersion}
+  \StrCut[1]{\httpPath}{?}{\httpPath}{\httpQuery}
+  \xdef\httpMethod##1{\httpMethod}
+  \xdef\httpPath##1{\httpPath}
+  \xdef\httpVersion##1{\httpVersion}
+}
+
+\newcommand{\httpParseQuery}{
+  \StrSubstitute[0]{\httpQuery}{\detokenize{+}}{\urldecodeseparator 20}[\httpQuery]
+  \loop
+  \unless\ifx\httpQuery\empty
+    \StrCut[1]{\httpQuery}{\detokenize{&}}{\value}{\httpQuery}
+    \StrCut[1]{\value}{=}{\name}{\value}
+    {
+      \urldecode{\name}{\name}
+      \urldecode{\value}{\value}
+      \expandafter\xdef\csname query\name\endcsname####1{\value}
+    }
+  \repeat
+}
+
+\ExplSyntaxOn
+\newcommand{\httpTransformHeaderName}[1]{\text_titlecase:n{\text_lowercase:n{#1}}}
+\ExplSyntaxOff
+
+\newcommand{\httpParseHeader}{
+  \loop
+  \readln{\header}
+  \unless\ifx\header\empty{
+      \StrCut[1]{\header}{:}{\name}{\value}
+      \IfBeginWith{\value}{ }{\StrGobbleLeft{\value}{1}[\value]}{}
+      \urldecode{\name}{\name}
+      \urldecode{\value}{\value}
+      \edef\name{\httpTransformHeaderName{\name}}
+      \expandafter\xdef\csname http\name\endcsname####1{\value}
+    }
+  \repeat
+}
+
+\newcommand{\httpParseFormUrlEncoded}[1]{
+  \edef\body{#1}
+  \loop
+  \unless\ifx\body\empty
+    \StrCut[1]{\body}{\detokenize{&}}{\value}{\body}
+    \StrCut[1]{\value}{=}{\name}{\value}
+    {
+      \urldecode{\name}{\name}
+      \urldecode{\value}{\value}
+      \expandafter\xdef\csname post\name\endcsname####1{\value}
+    }
+  \repeat
+}
+
+\newcommand{\httpParseCookie}[1]{
+  \ifdefined\httpCookie{}
+    \edef\cookielist{\httpCookie{}}
+    \loop
+    \unless\ifx\cookielist\empty
+      \StrCut[1]{\cookielist}{\detokenize{; }}{\entry}{\cookielist}
+      \StrCut[1]{\entry}{=}{\name}{\value}
+      {
+        \urldecode{\name}{\name}
+        \urldecode{\value}{\value}
+        \expandafter\xdef\csname cookie\name\endcsname####1{\value}
+      }
+    \repeat
+  \fi
+}
+
+\newcommand{\httpReadBody}[2]{
+  \ifdefined\httpContent-length
+    \IfInteger{\httpContent-length{}}{
+      \immediate\write18{head -c \httpContent-length{} /proc/self/fd/\stdinfileno | xxd -p -c 0 > body.tex}
+      \newread{\bodyfd}
+      \immediate\openin\bodyfd=body.tex
+      \immediate\readline\bodyfd to \body
+      \StrGobbleRight{\body}{1}[\body]
+      \immediate\closein\bodyfd
+      \unhex{\body}{\body}
+      \IfStrEq{\httpContent-type{}}{\detokenize{application/x-www-form-urlencoded}}{
+        \httpParseFormUrlEncoded{\body}
+        #1
+      }{#2}
+    }{
+      #2
+    }
+  \else
+    #1
+  \fi
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%% Response %%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\httpPrintDefaultHeaders}{
+  \print{Server: LaTeX}
+  \print{Connection: close}
+  \ifdefined\httpCookies
+    \print{\httpCookies}
+  \fi
+}
+
+\newcommand{\httpResponseStart}[1]{\print{\httpVersion{} #1}}
+\newcommand{\httpResponseEmptyBody}{
+  \httpPrintDefaultHeaders{}
+  \print{Content-Length: 0}
+  \print{}
+}
+
+\def\contenttypecss{text/css}
+\def\contenttypesvg{image/svg+xml}
+
+\newcommand{\httpSendFile}[1]{
+  \print{\httpVersion{} 200 Success}
+  \newwrite{\tmpfile}
+  \immediate\openout\tmpfile=path
+  \immediate\write\tmpfile{#1}
+  \immediate\closeout\tmpfile{}
+
+  \immediate\write18{echo -n 'Content-Length: '; stat -c \%s "`cat path.tex`"}
+  \httpPrintDefaultHeaders{}
+  \begingroup
+  \StrCut[1]{#1}{.}{\basename}{\extension}
+  \edef\contenttypelookup{contenttype\extension}
+  \expandafter\ifdefined\expandafter\csname\contenttypelookup\endcsname
+    \print{Content-Type: \expandafter\csname\contenttypelookup\endcsname}
+  \fi
+  \endgroup
+  \print{Cache-Control: max-age=36000}
+  \print{}
+  \immediate\write18{cat "`cat path.tex`"}
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%% Dispatch %%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\httpTryServeStatic}[1]{
+  \IfStrEq{\httpMethod{}}{\detokenize{GET}}{
+    \IfFileExists{\httpStatic\httpPath{}}{
+      \httpSendFile{\httpStatic\httpPath{}}
+    }{
+      \IfFileExists{\httpStatic\httpPath{}/\httpIndexPage}{
+        \httpSendFile{\httpStatic\httpPath{}/\httpIndexPage}
+      }{
+        #1
+      }
+    }
+  }{
+    #1
+  }
+}
+
+\makeatletter
+\def\@content{}
+\def\output#1{
+  \ifdefined\@inoutput
+    #1
+  \else
+    \begingroup
+    \def\@inoutput{}
+    \xdef\@content{\@content#1}
+    \endgroup
+  \fi
+}
+
+\def\additionalHTTPHeaders{^^J}
+\newcommand{\addHeader}[1]{
+  \xdef\additionalHTTPHeaders{#1^^J\additionalHTTPHeaders}
+}
+
+\newcommand{\httpRenderPage}{
+  \IfFileExists{/srv/pages/\httpPath{}.tex}{
+    \gdef\responseStatus{200 Ok}
+    \gdef\responseContentType{text/plain}
+
+    \input{/srv/pages/\httpPath{}.tex}
+    
+    \print{\httpVersion{} \responseStatus}
+
+    \newwrite{\bodyfile}
+    \immediate\openout\bodyfile=httpbody
+    \immediate\write\bodyfile{\@content}
+    \immediate\closeout\bodyfile
+    \immediate\write18{echo -n 'Content-Length: '; stat -c \%s httpbody.tex}
+    \print{Content-Type: \responseContentType}
+    \httpPrintDefaultHeaders{}
+    \print{\additionalHTTPHeaders}
+    \print{\@content}
+  }{
+    \print{\httpVersion{} 404 Not Found}
+    \httpResponseEmptyBody{}
+  }
+}
+\makeatother
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%% Global API %%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\ifdefined\httpIndexPage
+\else
+  \newcommand{\httpIndexPage}{index.html}
+\fi
+
+\makeatletter
+\def\httpMiddlewareChain{\@httpMiddlewareFunc}
+\newcommand{\httpMiddlewareUse}[1]{
+  \xdef\httpMiddlewareChain{
+    \noexpand#1{\unexpanded\expandafter{\httpMiddlewareChain}}}
+}
+\newcommand{\httpMiddlewareRun}[1]{
+  \begingroup
+  \def\@httpMiddlewareFunc{#1}
+  \httpMiddlewareChain
+  \endgroup
+}
+\makeatother
+
+\newcommand{\httpCookieAdd}[1]{
+  \ifdefined\httpCookies
+    \xdef\httpCookies{Set-Cookie: #1\Uchar10\httpCookies}
+  \else
+    \xdef\httpCookies{Set-Cookie: #1}
+  \fi
+}
+
+\newcommand{\httpServe}{
+  \httpParseLine{}
+
+  \IfStrEqCase{\httpVersion{}}{
+    {\detokenize{HTTP/1.0}}{\def\httpSupportedVersion{}}
+    {\detokenize{HTTP/1.1}}{\def\httpSupportedVersion{}}}
+
+  \ifdefined\httpSupportedVersion{}
+    \IfSubStr[1]{\httpPath{}}{\detokenize{..}}{
+      \print{\httpVersion{} 404 Not Found}
+      \httpResponseEmptyBody{}
+    }{
+      \httpParseQuery{}
+      \httpParseHeader{}
+      \httpParseCookie{}
+      \httpReadBody{
+        \httpMiddlewareRun{\httpRenderPage}
+      }
+    }{
+      \print{\httpVersion{} 400 Bad Request}
+      \httpResponseEmptyBody{}
+    }
+  \else
+    \print{HTTP/1.1 400 Bad Request}
+    \httpResponseEmptyBody{}
+  \fi
+}
+
+\ifdefined\httpStatic
+  \httpMiddlewareUse{\httpTryServeStatic}
+\fi
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%  Helpers %%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\IfPOST}[2]{\IfStrEq{\httpMethod{}}{\detokenize{POST}}{#1}{#2}}
+\newcommand{\IfGET}[2]{\IfStrEq{\httpMethod{}}{\detokenize{GET}}{#1}{#2}}
+\newcommand{\IfCurrentPage}[3]{\IfStrEq{\httpPath{}}{\detokenize{#1}}{#2}{#3}}
+
+
+\renewcommand{\paragraph}[1]{\output{<p>#1</p>}}
+\newcommand{\link}[2]{\output{<a href="#1">#2</a>}}
+\newcommand{\form}[1]{\output{<form method="POST">}#1\output{</form>}}
+\newcommand{\unstyledform}[1]{\output{<form class="plain" method="POST">}#1\output{</form>}}
+\newcommand{\formtextinput}[2]{\output{<label>#2</label><input type="text" name="#1" />}}
+\newcommand{\formhidden}[2]{\output{<input type="hidden" name="#1" value="#2" />}}
+\newcommand{\formsubmit}[1]{\output{<input type="submit" value="#1" />}}
+
+\newcommand{\redirect}[2]{\output{<meta http-equiv="Refresh" content="#2;url=#1" />}}

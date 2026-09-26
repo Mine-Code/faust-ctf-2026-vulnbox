@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Your Files{% endblock %}
+
+{% block content %}
+<section class="files-container container">
+    <h2>Your Files</h2>
+    {% if projects %}
+    <div class="files-grid">
+        {% for proj in projects %}
+        <div class="file-card">
+            <a href="/download_file/{{ proj }}" class="file-link"></a>
+            
+            <div class="file-name">{{ proj }}</div>
+            <div class="file-preview">
+                <object data="/download_file/{{ proj }}" type="application/pdf">
+                    <p>Preview not available.</p>
+                </object>
+            </div>
+
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>You have not uploaded any files yet. <a href="/convert_file">Upload one now</a>.</p>
+    {% endif %}
+</section>
+
+<script>
+document.querySelectorAll('.file-card').forEach(card => {
+    card.addEventListener('mousemove', e => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left; // X position inside card
+        const y = e.clientY - rect.top;  // Y position inside card
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+
+        const dx = (x - cx) / cx;
+        const dy = (y - cy) / cy;
+
+        const rotateX = dy * 10; // max 10 deg rotation
+        const rotateY = dx * 10;
+
+        card.style.transform = `rotateX(${-rotateX}deg) rotateY(${rotateY}deg)`;
+    });
+
+    card.addEventListener('mouseleave', () => {
+        card.style.transition = 'transform 0.3s ease';
+        card.style.transform = 'rotateX(0deg) rotateY(0deg)';
+
+        // Remove the transition after it completes so mousemove updates are instant again
+        setTimeout(() => {
+            card.style.transition = '';
+        }, 300);
+    });
+});
+</script>
+
+{% endblock %}
+

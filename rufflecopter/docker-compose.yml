@@ -1,0 +1,53 @@
+version: "2.2"
+# ipv6 is not supported in version 3
+
+services:
+  rufflecopter_deps:
+    scale: 0
+    image: faust.cs.fau.de:5000/rufflecopter_deps
+    # image: rufflecopter_deps
+    build:
+      context: service
+      dockerfile: Dockerfile.deps
+
+  rufflecopter:
+    restart: unless-stopped
+    image: faust.cs.fau.de:5000/rufflecopter
+    # image: rufflecopter
+    build: service
+    init: true
+    ports:
+        - "35244:8080/tcp"
+
+  postgres:
+    restart: unless-stopped
+    image: docker.io/postgres
+    environment:
+      POSTGRES_DB: rufflecopter_db
+      POSTGRES_USER: ruffle
+      POSTGRES_PASSWORD: wh2Gffp593ohzS06p7nr8KT0HWPu0IiC
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:z
+      - data:/var/lib/postgresql
+
+  postgrest:
+    restart: unless-stopped
+    image: docker.io/postgrest/postgrest
+    environment:
+      PGRST_DB_ANON_ROLE: ruffle
+      PGRST_SERVER_HOST: 0.0.0.0 # necessary for `postgrest --ready` flag to work
+      PGRST_DB_URI: postgres://ruffle:wh2Gffp593ohzS06p7nr8KT0HWPu0IiC@postgres:5432/rufflecopter_db
+      PGRST_OPENAPI_SERVER_PROXY_URI: http://127.0.0.1:3000
+    depends_on:
+      - postgres
+
+volumes:
+  data:
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+        driver: default
+        config:
+            - subnet: "fd42:d0ce:1234::/64"

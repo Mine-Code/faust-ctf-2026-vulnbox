@@ -1,0 +1,148 @@
+\usepackage{xstring}
+\newwrite{\redisout}
+\newread{\redisin}
+
+\begingroup
+\catcode`\%=12
+\catcode`\$=12
+\gdef\redismapid{%}
+\gdef\redisbulkstrid{$}
+\endgroup
+
+\newcommand{\redisWriteBulkString}[1]{
+  \begingroup
+  \StrLen{#1}[\len]
+  \immediate\write\redisout{\redisbulkstrid\len\Uchar13}
+  \immediate\write\redisout{#1\Uchar13}
+  \endgroup
+}
+
+\newcommand{\redisReadRepeat}[2]{
+  \ifnum#2>0
+    #1{#2}
+    \expandafter\redisReadRepeat{#1}{\number\numexpr#2-1}
+  \fi
+}
+
+\makeatletter
+\newcommand{\redisReadMapEntry}[2]{
+  \begingroup
+  \redisReadValue{redis@mapkey}
+  \edef\name{#1\redis@mapkey{}}
+  \expandafter\redisReadValue{\name}
+  \endgroup
+}
+\makeatother
+
+\newcommand{\redisReadMap}[2]{
+  \redisReadRepeat{\redisReadMapEntry{#1}}{#2}
+}
+
+\newcommand{\redisReadArrayEntry}[2]{
+  \expandafter\redisReadValue{#1#2}
+}
+
+\newcommand{\redisReadArray}[2]{
+  \expandafter\xdef\csname#1count\endcsname##1{#2}
+  \redisReadRepeat{\redisReadArrayEntry{#1}}{#2}
+}
+
+\newcommand{\redisReadBulkStr}[2]{
+  \begingroup
+  \immediate\read\redisin to \line
+  \StrGobbleRight{\line}{1}[\line]
+  \expandafter\xdef\csname#1\endcsname##1{\line}
+  \endgroup
+}
+
+\newcommand{\redisReadValue}[1]{
+  \begingroup
+  \catcode`\%=12
+  \catcode`\$=12
+  \immediate\read\redisin to \line
+  \StrLeft{\line}{1}[\type]
+  \StrGobbleLeft{\line}{1}[\val]
+  \IfStrEq{\type}{\redismapid}{
+    \redisReadMap{#1}{\val}
+  }{
+    \IfStrEq{\type}{\redisbulkstrid}{
+      \redisReadBulkStr{#1}{\val}
+    }{
+      \IfStrEq{\type}{:}{
+        \expandafter\xdef\csname#1\endcsname{\val}
+      }{
+        \IfStrEq{\type}{*}{
+          \redisReadArray{#1}{\val}
+        }{
+          \IfStrEq{\type}{-}{
+            \expandafter\xdef\csname#1\endcsname{\val}
+          }{
+            \IfStrEq{\type}{+}{
+              \expandafter\xdef\csname#1\endcsname{\val}
+            }{}
+
+          }
+        }
+      }
+    }
+  }
+  \endgroup
+}
+
+\newcommand{\redisOpen}{
+  \immediate\write18{mkfifo redisout.tex}
+  \immediate\openin\redisin=|/srv/redis.sh
+  \immediate\openout\redisout=redisout
+
+  \immediate\write\redisout{HELLO 3\Uchar13}
+  \immediate\closeout\redisout
+  \redisReadValue{redis}
+}
+
+\newcommand{\redisClose}{
+  \immediate\openout\redisout=redisout
+  \immediate\write18{rm redisout.tex}
+  \immediate\closeout\redisout
+  \immediate\closein\redisin
+}
+
+\makeatletter
+\newcommand{\redisSet}[2]{
+  \immediate\openout\redisout=redisout
+  \immediate\write\redisout{*3\Uchar13}
+  \redisWriteBulkString{SET}
+  \redisWriteBulkString{#1}
+  \redisWriteBulkString{#2}
+  \immediate\closeout\redisout
+  \redisReadValue{redis@tmpoutput}
+}
+\makeatother
+
+\newcommand{\redisSetEx}[3]{
+  \immediate\openout\redisout=redisout
+  \immediate\write\redisout{*5\Uchar13}
+  \redisWriteBulkString{SET}
+  \redisWriteBulkString{#1}
+  \redisWriteBulkString{#2}
+  \redisWriteBulkString{EX}
+  \redisWriteBulkString{#3}
+  \immediate\closeout\redisout
+  \redisReadValue{redis@tmpoutput}
+}
+
+\newcommand{\redisGet}[2]{
+  \begingroup
+  \immediate\openout\redisout=redisout
+  \immediate\write\redisout{*2\Uchar13}
+  \redisWriteBulkString{GET}
+  \redisWriteBulkString{#1}
+  \immediate\closeout\redisout
+  \edef\macro{\detokenize{#2}}
+  \StrLeft{\string\x}{1}[\backslashstring]
+  \IfBeginWith{\macro}{\backslashstring}{
+    \StrGobbleLeft{\macro}{1}[\macro]
+    \StrGobbleRight{\macro}{1}[\macro]
+  }{}
+  \redisReadValue{\macro}
+  \endgroup
+}

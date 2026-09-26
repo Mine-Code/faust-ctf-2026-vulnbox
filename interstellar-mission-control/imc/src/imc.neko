@@ -1,0 +1,15 @@
+var db = $loader.loadmodule("db",$loader);
+var utils = $loader.loadmodule("utils", $loader);
+var parser = $loader.loadmodule("parser", $loader);
+
+var file_stdin = $loader.loadprim("file@file_stdin", 0);
+var file_eof = $loader.loadprim("file@file_eof", 1);
+
+var stdin = file_stdin();
+
+
+db.initDB()
+$print("Welcome to Interstellar Mission Controll v67\n");
+while($not(file_eof(stdin))){
+	parser.handleRequest();
+}

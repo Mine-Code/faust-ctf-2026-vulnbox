@@ -1,0 +1,41 @@
+\gdef\responseContentType{text/html}
+
+\output{
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <title> \ifdefined\pageHeaderTitle\pageHeaderTitle\else\pageTitle\fi </title>
+    <link rel="stylesheet" href="global.css">
+    \ifdefined\additionalHeadTags
+        \additionalHeadTags
+    \fi
+  </head>
+  <body>
+}
+
+\IfCurrentPage{/}{\def\overviewClass{ highlight}}{\def\overviewClass{}}
+\IfCurrentPage{/login}{\def\loginClass{ highlight}}{\def\loginClass{}}
+\IfCurrentPage{/register}{\def\registerClass{ highlight}}{\def\registerClass{}}
+
+\output{
+  <img src="/logo.svg" width="100\textpercent" style="aspect-ratio: 2000 / 100; background: var(--background-header-image); border-bottom: 1px solid var(--background-header-border)" />
+  <div id="menu">
+    <a class="menu-item\overviewClass" href="/">Overview</a>
+    <div class="spacer"></div>
+  \IfLoggedIn{
+    <a class="menu-item" href="/logout">Logout</a>
+  }{
+    <a class="menu-item\loginClass" href="/login">Login</a>
+    <a class="menu-item\registerClass" href="/register">Register</a>
+  }
+  </div>
+}
+
+\output{<div id="content"><h1> \pageTitle </h1>}
+\pageBody
+\output{</div>}
+
+\output{
+  </body>
+</html>
+}

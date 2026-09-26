@@ -1,0 +1,11 @@
+\batchmode
+\documentclass{article}
+
+\newcommand{\sqlhost}[1]{mariadb}
+\newcommand{\database}[1]{lamp}
+\newcommand{\sqluser}[1]{root}
+\newcommand{\sqlpassword}[1]{root}
+\usepackage{sql}
+
+\sql{DELETE FROM ships WHERE created < DATE_SUB(NOW(), INTERVAL 90 MINUTE);}
+\write18{find /storage -type f -mmin +90 -delete}

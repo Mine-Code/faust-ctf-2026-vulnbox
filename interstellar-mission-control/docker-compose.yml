@@ -1,0 +1,21 @@
+version: '2.2'
+services:
+  imc:
+    restart: unless-stopped
+    image: faust.cs.fau.de:5000/imc
+    build:
+      context: imc/
+      dockerfile: Dockerfile
+    volumes:
+      - imc_db:/imc/data
+    ports:
+      - 8080:8080/tcp
+volumes:
+  imc_db: null
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: fd42:d0ce:4444::/64

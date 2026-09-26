@@ -1,0 +1,66 @@
+\usepackage{xstring}
+\usepackage{fp}
+
+\newcommand{\defhex}[2]{
+  \expandafter\xdef\csname hex#1\endcsname{#2}
+}
+\defhex{0}{0}
+\defhex{1}{1}
+\defhex{2}{2}
+\defhex{3}{3}
+\defhex{4}{4}
+\defhex{5}{5}
+\defhex{6}{6}
+\defhex{7}{7}
+\defhex{8}{8}
+\defhex{9}{9}
+\defhex{a}{10}
+\defhex{b}{11}
+\defhex{c}{12}
+\defhex{d}{13}
+\defhex{e}{14}
+\defhex{f}{15}
+\defhex{A}{10}
+\defhex{B}{11}
+\defhex{C}{12}
+\defhex{D}{13}
+\defhex{E}{14}
+\defhex{F}{15}
+
+\newcommand{\unhex}[2]{
+  \edef\tmp{#1}
+  \gdef#2{}
+  \loop
+  \unless\ifx\tmp\empty
+    \StrLeft{\tmp}{1}[\numa]
+    \StrGobbleLeft{\tmp}{1}[\tmp]
+    \StrLeft{\tmp}{1}[\numb]
+    \StrGobbleLeft{\tmp}{1}[\tmp]
+    \edef\a{\csname hex\numa\endcsname}
+    \edef\b{\csname hex\numb\endcsname}
+    \FPeval\n{clip(\a*16+\b)}
+    \xdef#2{#2\Uchar\n}
+  \repeat
+}
+
+\newcommand{\ifhexchar}[3]{
+  \begingroup
+  \edef\tmp{#1}
+  \StrLen{\tmp}[\len]
+  \ifnum\len=2
+    \StrLeft{\tmp}{1}[\numa]
+    \StrRight{\tmp}{1}[\numb]
+    \expandafter\ifdefined\csname hex\numa\endcsname
+      \expandafter\ifdefined\csname hex\numb\endcsname
+        #2
+      \else
+        #3
+      \fi
+    \else
+      #3
+    \fi
+  \else
+    #3
+  \fi
+  \endgroup
+}

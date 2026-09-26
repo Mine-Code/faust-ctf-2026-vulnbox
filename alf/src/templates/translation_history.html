@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Your Translation History{% endblock %}
+
+{% block content %}
+<section class="files-container container">
+    <h2>Your Translations</h2>
+    {% if translations %}
+            <hr>
+        {% for t in translations %}
+            <div>{{ t.source_text }}</div>
+            <div>{{ t.translated_text }}</div>
+            <hr>
+        {% endfor %}
+    {% else %}
+    <p>You have not uploaded any files yet. <a href="/convert_file">Upload one now</a>.</p>
+    {% endif %}
+</section>
+
+{% endblock %}
+

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Convert File{% endblock %}
+
+{% block content %}
+<section class="convert-container container">
+    <h2>Convert Your Alien File</h2>
+    <p>Select the language and upload your file to translate it instantly.<br>
+    You can upload:<br>
+    1. A single .typ file.<br>
+    2. A archive containing a main.typ and additional assets like images.
+    </p>
+
+    <form action="/convert_file" method="post" enctype="multipart/form-data" class="convert-form">
+        <label for="lang">Choose Target Language</label>
+        <select name="lang" id="lang">
+            {% for lang in langs %}
+                <option value="{{ lang }}"
+                  {% if loop.first %}selected{% endif %}
+                >
+                  {{ lang }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <label for="file" class="file-label">
+            <span>Drag & Drop file here or click to browse</span>
+            <input type="file" name="file" id="file" required>
+        </label>
+
+        <button type="submit">Translate File</button>
+    </form>
+</section>
+{% endblock %}
+

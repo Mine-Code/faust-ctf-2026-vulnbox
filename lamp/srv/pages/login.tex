@@ -1,0 +1,48 @@
+\newcommand{\pageTitle}{Login}
+
+\newcommand{\pageBody}{
+  \IfPOST{
+    \ifdefined\postusername
+    \else
+      \paragraph{No username given}
+    \fi
+
+    \ifdefined\postpassword
+    \else
+      \paragraph{No password given}
+    \fi
+
+    \ifdefined\postusername
+      \ifdefined\postpassword
+        \redisGet{user_\postusername{}}{\targetPassword}
+        \ifdefined\targetPassword
+          \edef\targetPassword{\detokenize\expandafter{\targetPassword{}}}
+          \edef\givenPassword{\detokenize\expandafter{\postpassword{}}}
+          \IfStrEq{\targetPassword}{\givenPassword}{
+            \redisSetEx{session_user_\sessionId{}}{\postusername{}}{\sessionTimeout}
+            \def\loginSuccess{}
+          }{\def\loginFail{}}
+        \else
+          \def\loginFail{}
+        \fi
+      \fi
+    \fi
+  }{
+  }
+
+  \ifdefined\loginSuccess
+    \paragraph{Successfully logged in}
+    \redirect{/}{2}
+  \else
+    \ifdefined\loginFail
+      \paragraph{Failed to log in}
+    \fi
+    \form{
+      \formtextinput{username}{Username:}
+      \formtextinput{password}{Password:}
+      \formsubmit{Log In}
+    }
+  \fi
+}
+
+\input{components/layout.tex}

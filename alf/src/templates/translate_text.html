@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Translate{% endblock %}
+
+{% block content %}
+<section class="convert-container container">
+    <form id="translate_form" action="/translate_text" method="post" enctype="multipart/form-data" class="convert-form">
+        <label for="lang"></label>
+        <textarea id="to_translate" name="to_translate" rows="4" cols="50"></textarea>
+        <button type="submit">Translate</button>
+        <textarea id="from_translate" rows="4" cols="50"></textarea>
+    </form>
+    <a href="/translation_history">Translation History</a>
+</section>
+
+<script>
+  translate_form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    to_translate.value = btoa(to_translate.value)
+
+    const res = await fetch(translate_form.action, {
+      method: translate_form.method,
+      body: new FormData(translate_form)
+    });
+    to_translate.value = atob(to_translate.value)
+
+    from_translate.value = atob(await res.text())
+  });
+
+</script>
+{% endblock %}
+

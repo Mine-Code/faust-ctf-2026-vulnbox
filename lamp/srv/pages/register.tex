@@ -1,0 +1,123 @@
+\newcommand{\pageTitle}{Register}
+
+\newwrite{\shipfile}
+
+% string codes for \ { and }
+\StrChar{\string\f}{1}[\stringbackslash]
+\StrChar{\string\{}{2}[\stringcurlyopen]
+\StrChar{\string\}}{2}[\stringcurlyclose]
+\StrChar{\string\_}{2}[\stringsub]
+\StrChar{\string\^}{2}[\stringsup]
+
+% Stores macro #1, e.g. \store{\foo} generates
+% \def\foo{...}
+% with \ escaped as \textbackslash{}
+%      { escaped as \{
+%      } escaped as \}
+\newcommand{\store}[2]{
+  \begingroup
+  \StrSubstitute{#2}{\stringbackslash}{\string\Uchar92}[\escaped]
+  \StrSubstitute{\escaped}{\stringcurlyopen}{\string\Uchar123}[\escaped]
+  \StrSubstitute{\escaped}{\stringcurlyclose}{\string\Uchar125}[\escaped]
+  \StrSubstitute{\escaped}{\stringsub}{\string\Uchar95}[\escaped]
+  \StrSubstitute{\escaped}{\stringsup}{\string\Uchar94}[\escaped]
+  \immediate\write\shipfile{\noexpand\def\noexpand#1{\escaped}}
+  \endgroup
+}
+
+\ExplSyntaxOn
+
+\prg_new_conditional:Npnn \str_if_alnum:n #1 { T, F, TF }
+{
+    \bool_set_true:N \l_tmpa_bool
+    \tl_map_inline:nn { #1 }
+      {
+        \bool_lazy_or:nnF
+          {
+            \bool_lazy_and_p:nn
+              { \int_compare_p:nNn { `##1 } > { 47 } }
+              { \int_compare_p:nNn { `##1 } < { 58 } }
+          }
+          {
+            \bool_lazy_or_p:nn
+              {
+                \bool_lazy_and_p:nn
+                  { \int_compare_p:nNn { `##1 } > { 64 } }
+                  { \int_compare_p:nNn { `##1 } < { 91 } }
+              }
+              {
+                \bool_lazy_and_p:nn
+                  { \int_compare_p:nNn { `##1 } > { 96 } }
+                  { \int_compare_p:nNn { `##1 } < { 123 } }
+              }
+          }
+          { \bool_set_false:N \l_tmpa_bool }
+      }
+    \bool_if:NTF \l_tmpa_bool { \prg_return_true: } { \prg_return_false: }
+  }
+
+\newcommand{\ifAlnum}[3]
+  {
+    \str_if_alnum:nTF { #1 } { #2 } { #3 }
+  }
+
+\ExplSyntaxOff
+
+\newcommand{\pageBody}{
+  \IfPOST{
+    \ifdefined\postusername
+      \expandafter\ifAlnum\expandafter{\postusername{}}{}{\gdef\registerFail{Username must be alphanumeric}}
+    \else
+      \def\registerFail{No username given}
+    \fi
+
+    \ifdefined\postpassword
+    \else
+      \def\registerFail{No password given}
+    \fi
+
+    \ifdefined\postshipname
+    \else
+      \def\registerFail{No ship name given}
+    \fi
+
+    \ifdefined\registerFail
+    \else
+      \redisGet{user_\postusername{}}{\targetPassword}
+      \ifdefined\targetPassword
+        \def\registerFail{Account already exists}
+      \else
+        \redisSetEx{user_\postusername{}}{\postpassword{}}{\userTimeout}
+        \redisSetEx{session_user_\sessionId{}}{\postusername{}}{\sessionTimeout}
+        \def\registerSuccess{}
+      \fi
+    \fi
+  }{
+  }
+
+  \ifdefined\registerSuccess
+    \paragraph{Successfully registered account}
+    \begingroup
+    \sqlescape{\postusername{}}{\username}
+    \sql{
+        INSERT INTO ships SET username="\username";
+    }
+    \endgroup
+    \immediate\openout\shipfile=/storage/\postusername{}
+    \store{\shipname}{\postshipname{}}
+    \immediate\closeout\shipfile{}
+    \redirect{/}{2}
+  \else
+    \ifdefined\registerFail
+      \paragraph{\registerFail}
+    \fi
+    \form{
+      \formtextinput{username}{Username:}
+      \formtextinput{password}{Password:}
+      \formtextinput{shipname}{Name of ship:}
+      \formsubmit{Register}
+    }
+  \fi
+}
+
+\input{components/layout.tex}

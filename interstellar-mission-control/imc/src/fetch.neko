@@ -1,0 +1,114 @@
+var utils = $loader.loadmodule("utils", $loader);
+var resp = $loader.loadmodule("responder", $loader);
+var db = $loader.loadmodule("db",$loader);
+
+var readline = $loader.loadprim("file@read_stdin_line", 2);
+var MAXLINE = 4067;
+
+var FETCH_SPECS = {
+	BEING => { table => "BEINGS", tag => "QkRS",
+		cols => $array("id","name","age","remaining_lives","affiliation","crew","diseases","skills"),
+                filter => function(being, row) {return being.id==row.id}},
+	CREW => { table => "CREWS", tag => "Q0RS",
+		cols => $array("id","name","captain","allowance","equipment","invited"),
+                filter => function(being, row) {return being.id==row.captain || being.crew==row.id}},
+	MISSION => { table => "MISSIONS", tag => "TVNE",
+		cols => $array("id","name","milestones","spaceships","planets","deadline","sponsor","reward","overseer"),
+                filter => function(being, row) {return being.id==row.overseer || being.id==row.sponsor}},
+	SPACESHIP => { table => "SPACESHIPS", tag => "U0RS",
+		cols => $array("id","name","location","fuel","max_speed","tuv","manufacturer","crew","resources","capacity", "janitor"),
+                filter => function(being, row) {return being.crew==row.crew || being.id==row.janitor}}
+};
+
+var authenticate = function(identity){
+	if(identity == null) return null;
+	var being = db.getByName("BEINGS", identity.name);
+	if(being == null || being <= 0) return null;
+	if(being.authenticator != identity.auth || being.id != identity.id) return null;
+	return being;
+}
+
+var readSegments = function(ctx, tag){
+	var identity = null;
+	var descriptor = null;
+	var i = 0;
+	while(i < ctx.header.num_lines){
+		readline(ctx.line, MAXLINE);
+		var items = utils.splitAtChar(ctx.line, "|");
+		if(items[0] == "SURI"){
+			identity = {
+				id => items[1],
+				name => items[2],
+				auth => items[3]
+			};
+		}
+		if(tag != "" && items[0] == tag){
+			descriptor = items;
+		}
+		i = i+1;
+	}
+	return { identity => identity, descriptor => descriptor };
+}
+
+var handleFetch = function(ctx){
+	var spec = $objget(FETCH_SPECS, $hash(ctx.header.request_subject));
+	var tag = if(spec == null) "" else spec.tag;
+
+	var seg = readSegments(ctx, tag);
+	var identity = seg.identity;
+	var descriptor = seg.descriptor;
+
+	if(spec == null){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Unknown fetch subject"));
+		return -1;
+	}
+        
+        var being = authenticate(identity);
+	if(being == null){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Authentication failed!"));
+		return -1;
+	}
+
+	if(descriptor == null){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Missing Descriptor"));
+		return -1;
+	}
+
+	var cols = spec.cols;
+	var whereCols = $amake(0);
+	var whereVals = $amake(0);
+	var i = 0;
+	while(i < $asize(cols)){
+		if(i+1 < $asize(descriptor)){
+			var v = descriptor[i+1];
+			if(v != "" && v != null){
+				whereCols = $aconcat($array(whereCols, $array(cols[i])));
+				whereVals = $aconcat($array(whereVals, $array(v)));
+			}
+		}
+		i = i+1;
+	}
+
+	var rows = db.fetchByFields(spec.table, cols, whereCols, whereVals);
+	if(rows == null){
+		resp.sendMessage(resp.addErrorMessage(null, 1, "Fetch failed"));
+		return -1;
+	}
+	if($asize(rows) == 0){
+		resp.sendMessage(resp.addErrorMessage(null, 0, "Not found"));
+		return -1;
+	}
+
+	var out = $amake(0);
+	out = resp.addIdentityHeader(out, identity.id, identity.name, identity.auth);
+	i = 0;
+	while(i < $asize(rows)){
+                if(spec.filter(being, rows[i])){
+		        out = $aconcat($array(out, $array(resp.rowToDescriptor(spec.tag, cols, rows[i]))));
+                }
+		i = i+1;
+	}
+	resp.sendResponse(out, "FETCH", ctx.header.request_subject);
+	return 0;
+}
+$exports.handle = handleFetch;
