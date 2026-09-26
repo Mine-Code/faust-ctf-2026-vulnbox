@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Blueprint, render_template, request, redirect, flash, send_file, url_for, abort, current_app
+from flask import Blueprint, render_template, request, redirect, flash, send_file, url_for, current_app
 from flask_login import current_user, login_required
 import logging
 from .typst_util import get_translation
@@ -11,9 +11,11 @@ from . import db
 from .models import Translation
 import uuid
 import base64
-import resource
 import tarfile
 import shutil
+from werkzeug.utils import secure_filename
+from .safe_archive import UnsafeArchiveError, extract_archive
+from .typst_runner import TypstSandboxError, compile_typst
 
 main = Blueprint('main', __name__)
 
@@ -34,9 +36,6 @@ def extension_allowed(filename: str) -> bool:
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def set_file_limit():
-    resource.setrlimit(resource.RLIMIT_FSIZE, (4 * 1000 * 1000, 4 * 1000 * 1000))
-
 # ===== libparser.so capacity =====
 # libparser.so keeps every word in a fixed heap chunk
 #     struct word { char text[WORD_TEXT_CAP]; struct word *next; unsigned char len; }
@@ -51,14 +50,6 @@ def set_file_limit():
 WORD_TEXT_CAP = 0x48               # char text[WORD_TEXT_CAP] in struct word
 MAX_WORDSIZE = 0x3f                # longest word the scanner accepts
 MAX_SENTENCE_WORDS = 0xff          # sentence->count is a single byte
-
-# ===== tar extraction limits =====
-# RLIMIT_FSIZE only caps the size of *one* extracted file and MAX_CONTENT_LENGTH
-# only caps the upload, so an archive with very many small members inflates
-# without bound: a 2.9 MB upload was measured at 10.8 MB of files and 2000
-# inodes per request, i.e. ~57 MB/s of quiet disk fill.
-TAR_MAX_MEMBERS = 512
-TAR_MAX_TOTAL_BYTES = 32 * 1000 * 1000
 
 # The flex LETTER class of libparser.so, mirrored so the word splitting below
 # matches what the parser will actually accept.
@@ -97,33 +88,6 @@ def check_translatable(raw: bytes):
         return "word grows past the parser buffer"
     return None
 
-
-def check_tar(stream):
-    """Reject an archive whose extraction would exceed our disk budget.
-
-    Runs on the upload stream *before* anything is written, so a refused bomb
-    costs no disk at all.
-    """
-    members = 0
-    total = 0
-    try:
-        stream.seek(0)
-        with tarfile.open(fileobj=stream, mode="r:*") as tf:
-            for info in tf:
-                members += 1
-                if members > TAR_MAX_MEMBERS:
-                    return "too many archive members"
-                total += max(info.size, 0)
-                if total > TAR_MAX_TOTAL_BYTES:
-                    return "archive expands beyond the allowed size"
-    except tarfile.TarError:
-        return "not a readable archive"
-    finally:
-        try:
-            stream.seek(0)
-        except Exception:
-            pass
-    return None
 
 # ===== GET REQUESTS =====
 @main.route('/')
@@ -168,10 +132,9 @@ def get_translations():
 
 # ===== POST REQUESTS =====
 class Project:
-    def __init__(self, project_name, project_path, upload_path, pdf_path):
+    def __init__(self, project_name, project_path, pdf_path):
         self.project_name = project_name
         self.project_path = project_path
-        self.upload_path = upload_path
         self.pdf_path = pdf_path
 
     def set_typ_path(self, typ_path):
@@ -179,42 +142,25 @@ class Project:
 
 def convert_typ_file(file, project, language):
     filecontent = file.stream.read().decode("utf-8")
-    with open(project.upload_path, "w+") as f:
+    typ_path = project.project_path / f"{project.project_name}.typ"
+    with open(typ_path, "w") as f:
         f.write(get_translation(language))
         f.write("\n")
         f.write(filecontent)
-        project.set_typ_path(project.upload_path)
+    project.set_typ_path(typ_path)
 
 def convert_tar_file(file, project, language):
-    problem = check_tar(file.stream)
-    if problem:
-        logging.warning("rejected archive: %s", problem)
-        return False
-    file.save(project.upload_path)
     try:
-        result = subprocess.run(["tar", "xf", project.upload_path, "-C", project.project_path],
-                                preexec_fn=set_file_limit,
-                                capture_output=True,
-                                check=True)
-    except subprocess.CalledProcessError as e:
-        flash("Failed to extract archive")
-        return False
-    if result.returncode != 0:
-        flash("Failed to extract archive")
-        return False
-    project.set_typ_path(f"{project.project_path}/main.typ")
+        typ_path = extract_archive(file.stream, project.project_path)
+        filecontent = typ_path.read_text(encoding="utf-8")
+    except (tarfile.TarError, OSError, UnicodeError, UnsafeArchiveError) as error:
+        raise UnsafeArchiveError("invalid or unsafe tar archive") from error
 
-    try: 
-        with open(project.typ_path, "r") as f:
-            filecontent = f.read()
-    except:
-        flash("Couldn't find main.typ")
-        return
-    with open(project.typ_path, "w") as f:
+    with open(typ_path, "w") as f:
         f.write(get_translation(language))
         f.write("\n")
         f.write(filecontent)
-    return True
+    project.set_typ_path(typ_path)
 
 @main.route('/convert_file', methods=['POST'])
 @login_required
@@ -227,44 +173,56 @@ def convert_file():
     if language not in LANGS:
         flash("Language not supported")
         return redirect(request.url)
-    if not file.filename or file.filename == '' or not extension_allowed(file.filename):
+    if not file.filename:
         flash("Invalid filetype")
         return redirect(request.url)
-    project_name = file.filename.split(".", maxsplit=1)[0]
-    user_path = Path(DATA_PATH).joinpath(current_user.id).resolve()
-    project_path = Path(user_path).joinpath(project_name).resolve()
-    pdf_path = Path(project_path).joinpath(f"{project_name}.pdf").resolve()
-    if not project_path.is_relative_to(user_path):
+    safe_filename = secure_filename(file.filename)
+    if not extension_allowed(safe_filename):
+        flash("Invalid filetype")
+        return redirect(request.url)
+    project_name = safe_filename.split(".", maxsplit=1)[0]
+    if not project_name:
         flash("Invalid filename")
         return redirect(request.url)
+    user_path = Path(DATA_PATH) / current_user.id
+    project_path = user_path / project_name
     if project_path.exists():
         flash("Project with this name already exists")
         return redirect(request.url)
-    project_path.mkdir()
-    upload_path = project_path.joinpath(file.filename).resolve()
-    if not upload_path.is_relative_to(project_path):
-        flash("Invalid filename")
+    try:
+        project_path.mkdir(mode=0o700)
+    except FileExistsError:
+        flash("Project with this name already exists")
         return redirect(request.url)
-    project = Project(project_name, project_path, upload_path, pdf_path)
-
-    if get_extension(file.filename) == "typ":
-        convert_typ_file(file, project, language)
-    elif not convert_tar_file(file, project, language):
-        # nothing was extracted: drop the project directory again so a refused
-        # upload leaves no trace on disk
-        shutil.rmtree(project_path, ignore_errors=True)
-        return redirect(request.url)
+    pdf_path = project_path / f"{project_name}.pdf"
+    project = Project(project_name, project_path, pdf_path)
 
     try:
-        result = subprocess.run(["typst", "compile", "--root", project.project_path,
-                     "--font-path", "/app/src/static/fonts", project.typ_path, project.pdf_path],
-                                timeout=5, capture_output=True)
+        if get_extension(safe_filename) == "typ":
+            convert_typ_file(file, project, language)
+        else:
+            convert_tar_file(file, project, language)
+        result = compile_typst(
+            project.project_path,
+            project.typ_path,
+            project.pdf_path,
+            "/app/src/static/fonts",
+            timeout=5,
+        )
     except subprocess.TimeoutExpired:
+        shutil.rmtree(project_path, ignore_errors=True)
         flash("Document translation failed. Try again.")
         return redirect(request.url)
+    except (UnsafeArchiveError, TypstSandboxError, OSError, UnicodeError,
+            tarfile.TarError, subprocess.SubprocessError) as error:
+        current_app.logger.warning("Document processing rejected: %s", error)
+        shutil.rmtree(project_path, ignore_errors=True)
+        flash("Document translation failed. Try again.")
+        return redirect(request.url)
+
     if result.returncode != 0:
-        logging.error(result.stderr)
-        logging.error(result.stdout)
+        current_app.logger.error("Typst compilation failed: %s", result.stderr.decode("utf-8", "replace"))
+        shutil.rmtree(project_path, ignore_errors=True)
         flash("Document translation failed. Try again.")
         return redirect(request.url)
 
