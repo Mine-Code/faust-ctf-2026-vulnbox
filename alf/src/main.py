@@ -158,7 +158,8 @@ def convert_file():
         convert_tar_file(file, project, language)
 
     try:
-        result = subprocess.run(["typst", "compile", "--font-path", "/app/src/static/fonts", project.typ_path, project.pdf_path],
+        result = subprocess.run(["typst", "compile", "--root", project.project_path,
+                     "--font-path", "/app/src/static/fonts", project.typ_path, project.pdf_path],
                                 timeout=5, capture_output=True)
     except subprocess.TimeoutExpired:
         flash("Document translation failed. Try again.")
