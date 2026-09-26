@@ -11,13 +11,13 @@ var FETCH_SPECS = {
                 filter => function(being, row) {return being.id==row.id}},
 	CREW => { table => "CREWS", tag => "Q0RS",
 		cols => $array("id","name","captain","allowance","equipment","invited"),
-                filter => function(being, row) {return being.id==row.captain || being.crew==row.id}},
+                filter => function(being, row) {return being.id==row.captain || (being.crew != null && being.crew==row.id)}},
 	MISSION => { table => "MISSIONS", tag => "TVNE",
 		cols => $array("id","name","milestones","spaceships","planets","deadline","sponsor","reward","overseer"),
                 filter => function(being, row) {return being.id==row.overseer || being.id==row.sponsor}},
 	SPACESHIP => { table => "SPACESHIPS", tag => "U0RS",
 		cols => $array("id","name","location","fuel","max_speed","tuv","manufacturer","crew","resources","capacity", "janitor"),
-                filter => function(being, row) {return being.crew==row.crew || being.id==row.janitor}}
+                filter => function(being, row) {return (being.crew != null && being.crew==row.crew) || being.id==row.janitor}}
 };
 
 var authenticate = function(identity){
@@ -45,7 +45,7 @@ var readSegments = function(ctx, tag){
 		if(tag != "" && items[0] == tag){
 			descriptor = items;
 		}
-		i = i+1;
+		i = i + 1;
 	}
 	return { identity => identity, descriptor => descriptor };
 }
