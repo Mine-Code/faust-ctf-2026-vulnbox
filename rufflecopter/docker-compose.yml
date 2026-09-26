@@ -16,8 +16,18 @@ services:
     # image: rufflecopter
     build: service
     init: true
+    expose:
+      - "8080"
+
+  rufflecopter_proxy:
+    restart: unless-stopped
+    image: docker.io/nginx:alpine
+    depends_on:
+      - rufflecopter
     ports:
-        - "35244:8080/tcp"
+      - "35244:80/tcp"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   postgres:
     restart: unless-stopped
