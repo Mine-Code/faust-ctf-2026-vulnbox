@@ -79,7 +79,9 @@
       \urldecode{\name}{\name}
       \urldecode{\value}{\value}
       \edef\name{\httpTransformHeaderName{\name}}
+      \ifcsname http\name\endcsname\else
       \expandafter\xdef\csname http\name\endcsname####1{\value}
+      \fi
     }
   \repeat
 }
@@ -223,7 +225,7 @@
     \gdef\responseContentType{text/plain}
 
     \input{/srv/pages/\httpPath{}.tex}
-    
+
     \print{\httpVersion{} \responseStatus}
 
     \newwrite{\bodyfile}
