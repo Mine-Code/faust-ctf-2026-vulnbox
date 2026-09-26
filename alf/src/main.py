@@ -12,6 +12,8 @@ from .models import Translation
 import uuid
 import base64
 import resource
+import tarfile
+import shutil
 
 main = Blueprint('main', __name__)
 
@@ -34,6 +36,94 @@ def extension_allowed(filename: str) -> bool:
 
 def set_file_limit():
     resource.setrlimit(resource.RLIMIT_FSIZE, (4 * 1000 * 1000, 4 * 1000 * 1000))
+
+# ===== libparser.so capacity =====
+# libparser.so keeps every word in a fixed heap chunk
+#     struct word { char text[WORD_TEXT_CAP]; struct word *next; unsigned char len; }
+# and its translation pass rewrites that string *in place*, emitting one extra
+# 'r' for every 'r' it contains (0x341a).  A word of n characters holding k 'r's
+# therefore becomes n + k bytes, while the scanner only rejects words longer than
+# MAX_WORDSIZE characters -- so n + k reaches 128 and writes 48 bytes past the
+# chunk's usable area: word->next is replaced with attacker data (the next pass
+# dereferences it and the gunicorn worker dies with SIGSEGV) and the following
+# chunk's header is corrupted as well.  Refuse anything that does not still fit
+# in text[].
+WORD_TEXT_CAP = 0x48               # char text[WORD_TEXT_CAP] in struct word
+MAX_WORDSIZE = 0x3f                # longest word the scanner accepts
+MAX_SENTENCE_WORDS = 0xff          # sentence->count is a single byte
+
+# ===== tar extraction limits =====
+# RLIMIT_FSIZE only caps the size of *one* extracted file and MAX_CONTENT_LENGTH
+# only caps the upload, so an archive with very many small members inflates
+# without bound: a 2.9 MB upload was measured at 10.8 MB of files and 2000
+# inodes per request, i.e. ~57 MB/s of quiet disk fill.
+TAR_MAX_MEMBERS = 512
+TAR_MAX_TOTAL_BYTES = 32 * 1000 * 1000
+
+# The flex LETTER class of libparser.so, mirrored so the word splitting below
+# matches what the parser will actually accept.
+_TRANSLATE_SEPARATORS = b" \t\r\n\v\f"
+_TRANSLATE_TERMINATORS = b"!?.\x00"
+
+
+def check_translatable(raw: bytes):
+    """Reject a /translate_text payload that would overflow libparser.so.
+
+    Mirrors the accepted grammar (LETTER+ words separated by separator +
+    whitespace, sentence closed by a terminator) and applies the bound the
+    in-place 'r' expansion needs.  Returns None when the payload is safe.
+    """
+    if not raw or len(raw) > 64 * 1024:
+        return "input too large"
+    words = length = rs = 0
+    in_word = False
+    for byte in raw:
+        if byte in _TRANSLATE_SEPARATORS or byte in _TRANSLATE_TERMINATORS:
+            if in_word:
+                if length + rs > WORD_TEXT_CAP - 1:
+                    return "word grows past the parser buffer"
+                words += 1
+                if words > MAX_SENTENCE_WORDS:
+                    return "too many words in one sentence"
+                in_word = False
+            continue
+        if not in_word:
+            in_word, length, rs = True, 0, 0
+        length += 1
+        rs += (byte == ord("r"))
+        if length > MAX_WORDSIZE:
+            return "word longer than the parser accepts"
+    if in_word and length + rs > WORD_TEXT_CAP - 1:
+        return "word grows past the parser buffer"
+    return None
+
+
+def check_tar(stream):
+    """Reject an archive whose extraction would exceed our disk budget.
+
+    Runs on the upload stream *before* anything is written, so a refused bomb
+    costs no disk at all.
+    """
+    members = 0
+    total = 0
+    try:
+        stream.seek(0)
+        with tarfile.open(fileobj=stream, mode="r:*") as tf:
+            for info in tf:
+                members += 1
+                if members > TAR_MAX_MEMBERS:
+                    return "too many archive members"
+                total += max(info.size, 0)
+                if total > TAR_MAX_TOTAL_BYTES:
+                    return "archive expands beyond the allowed size"
+    except tarfile.TarError:
+        return "not a readable archive"
+    finally:
+        try:
+            stream.seek(0)
+        except Exception:
+            pass
+    return None
 
 # ===== GET REQUESTS =====
 @main.route('/')
@@ -96,6 +186,10 @@ def convert_typ_file(file, project, language):
         project.set_typ_path(project.upload_path)
 
 def convert_tar_file(file, project, language):
+    problem = check_tar(file.stream)
+    if problem:
+        logging.warning("rejected archive: %s", problem)
+        return False
     file.save(project.upload_path)
     try:
         result = subprocess.run(["tar", "xf", project.upload_path, "-C", project.project_path],
@@ -104,10 +198,10 @@ def convert_tar_file(file, project, language):
                                 check=True)
     except subprocess.CalledProcessError as e:
         flash("Failed to extract archive")
-        return
+        return False
     if result.returncode != 0:
         flash("Failed to extract archive")
-        return
+        return False
     project.set_typ_path(f"{project.project_path}/main.typ")
 
     try: 
@@ -120,6 +214,7 @@ def convert_tar_file(file, project, language):
         f.write(get_translation(language))
         f.write("\n")
         f.write(filecontent)
+    return True
 
 @main.route('/convert_file', methods=['POST'])
 @login_required
@@ -154,8 +249,11 @@ def convert_file():
 
     if get_extension(file.filename) == "typ":
         convert_typ_file(file, project, language)
-    else:
-        convert_tar_file(file, project, language)
+    elif not convert_tar_file(file, project, language):
+        # nothing was extracted: drop the project directory again so a refused
+        # upload leaves no trace on disk
+        shutil.rmtree(project_path, ignore_errors=True)
+        return redirect(request.url)
 
     try:
         result = subprocess.run(["typst", "compile", "--root", project.project_path,
@@ -176,6 +274,14 @@ def convert_file():
 @main.route('/translate_text', methods=['POST'])
 def translate_text():
     text = request.form.get("to_translate")
+    try:
+        raw = base64.b64decode(text.rstrip(), validate=False)
+    except Exception:
+        return base64.b64encode(b"Sorry, we were unable to translate your text!")
+    problem = check_translatable(raw)
+    if problem:
+        logging.warning("rejected /translate_text payload: %s", problem)
+        return base64.b64encode(b"Sorry, we were unable to translate your text!")
     translated = translator.translate(text.rstrip())
     if translated == "Translation failed!":
         return base64.b64encode("Sorry, we were unable to translate your text!".encode())
